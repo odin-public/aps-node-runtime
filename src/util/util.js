@@ -15,4 +15,11 @@ function extend(target, source) {
   return target;
 };
 
+function pad(number, length) {
+  number = String(number);
+  length = length || 2;
+  while (number.length < length) number = '0' + number;
+  return number;
+}
+exports.pad = pad;
 exports.extend = extend;
