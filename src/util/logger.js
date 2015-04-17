@@ -1,69 +1,59 @@
 const util = require('./util.js'),
   fs = require('fs'),
-  logLevels = [
-    'TRACE',
-    'DEBUG',
-    'INFO',
-    'ERROR'
-  ];
+  os = require('os');
 
 function Logger(fileName) {
   let self = this;
   self._ready = new Promise(function(resolve, reject) {
-    fs.open(fileName, 'a', 0o644, function(e, fd) {
-      if (e) {
-        reject(e);
+    fs.open(fileName, 'a', 0 o644, function(err, fd) {
+      if (err) {
+        reject(err);
       } else {
-        self._fd = fd;
         self._stream = fs.createWriteStream(null, {
+          encoding: 'utf-8',
           fd: fd
         });
-        resolve();
+        self._level = Logger.defaultLogLevel;
+        resolve(self);
       }
     });
   });
 }
 
-Logger.prototype.close = function() {
-    this._stream.
-}
+Logger.logLevels = [
+  'TRACE',
+  'DEBUG',
+  'INFO',
+  'ERROR'
+];
 
-Logger.dateTimeFormat = function(date) {
-  const pad = util.pad;
-  return `${date.getFullYear()}-${pad(date.getMonth(), 2)}-${pad(date.getDay(), 2)} ${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(),2)}.${pad(date.getMilliseconds(),3)}`;
-};
+Logger.defaultLogLevel = Logger.logLevels.indexOf('INFO');
 
-Logger.inspect = function(object, options) {
-  return util.inspect(object, options ? options : {
-    showHidden: false,
-    depth: 3,
-    colors: false
-  });
+Logger.prototype.setLevel = function(level) {
+  this._level = level; //checks
 };
 
 Logger.prototype.isReady = function() {
-  return this._ready ? true : false;
+  return this._ready;
 };
 
-Logger.prototype._log = function(type, message) {
-  const now = new Date();
-  this._stream.write(`${Logger.dateTimeFormat(now)} [${logLevels[type]}] ${message}`);
+Logger.prototype.log = function(level, data) {
+  if (level >= this._level) {
+    return this._stream.write(`${data}${os.EOL}`);
 };
 
-Logger.prototype.trace = function(message) {
-  return this._log(0, message);
+Logger.prototype.close = function() {
+  let self = this;
+  self._stream.end(); //promise?
 };
 
-Logger.prototype.debug = function(message) {
-  return this._log(1, message);
-};
+new Logger('test.txt').isReady().then(function(l) {
+  Logger.logLevels.length = 0
+  console.log(Logger.logLevels, logLevels);
 
-Logger.prototype.info = function(message) {
-  return this._log(2, message);
-};
-
-Logger.prototype.error = function(message) {
-  return this._log(3, message);
-};
-
-module.exports = Logger;
+  l.log(1, 'фыфвыф');
+  l.close();
+  setTimeout(function() { //more tests
+    l.log(1, '2');
+  }, 3000);
+})
