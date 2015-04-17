@@ -1,11 +1,23 @@
 const util = require('./util.js'),
   fs = require('fs'),
-  os = require('os');
+  os = require('os'),
+  levels = [
+    'TRACE',
+    'DEBUG',
+    'INFO',
+    'ERROR',
+    'CRITICAL'
+  ],
+  defaultLevel = levels.indexOf('TRACE');
 
 function Logger(fileName) {
-  let self = this;
-  self._ready = new Promise(function(resolve, reject) {
-    fs.open(fileName, 'a', 0 o644, function(err, fd) {
+  const self = this;
+  if ((typeof fileName !== 'string') || !fileName)
+    throw new Error('\'fileName\' argument must be a non-empty string');
+  self._level = defaultLevel;
+  self.formatDate = Logger.formatDate;
+  this._ready = new Promise(function(resolve, reject) {
+    fs.open(fileName, 'a', 0o644, function(err, fd) {
       if (err) {
         reject(err);
       } else {
@@ -13,47 +25,82 @@ function Logger(fileName) {
           encoding: 'utf-8',
           fd: fd
         });
-        self._level = Logger.defaultLogLevel;
         resolve(self);
       }
     });
   });
 }
 
-Logger.logLevels = [
-  'TRACE',
-  'DEBUG',
-  'INFO',
-  'ERROR'
-];
-
-Logger.defaultLogLevel = Logger.logLevels.indexOf('INFO');
-
 Logger.prototype.setLevel = function(level) {
-  this._level = level; //checks
+  switch (typeof level) {
+    case 'string':
+      {
+        const index = levels.indexOf(level);
+        if (index !== -1)
+          this._level = index;
+        else
+          throw new Error(`Log level '${level}' not found`);
+        break;
+      }
+    case 'number':
+      if (level in levels)
+        this._level = level;
+      else
+        throw new Error(`No such log level: ${level}`);
+      break;
+    default:
+      throw new Error('\'level\' argument must be a number or a string');
+  }
+  return this;
 };
 
 Logger.prototype.isReady = function() {
   return this._ready;
 };
 
-Logger.prototype.log = function(level, data) {
-  if (level >= this._level) {
-    return this._stream.write(`${data}${os.EOL}`);
+Logger.formatDate = function(date) {
+  const pad = util.padNumber;
+  return `${date.getFullYear()}-${pad(date.getMonth(), 2)}-${pad(date.getDay(), 2)} ${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(),2)}.${pad(date.getMilliseconds(),3)}`;
+};
+
+
+Logger.prototype._log = function(level, data) {
+  if (this._stream) {
+    if (level >= this._level)
+      return this._stream.write(`${this.formatDate(new Date())} [${levels[level]}] ${data}${os.EOL}`);
+  } else {
+    const self = this;
+    this._ready.then(function() {
+      self._log(level, data);
+    });
+  }
 };
 
 Logger.prototype.close = function() {
-  let self = this;
-  self._stream.end(); //promise?
+  const self = this;
+  return new Promise(function(resolve, reject) {
+    self._stream.end(function() {
+      resolve(self);
+    });
+  });
 };
 
-new Logger('test.txt').isReady().then(function(l) {
-  Logger.logLevels.length = 0
-  console.log(Logger.logLevels, logLevels);
+Logger.prototype.trace = function(data) {
+  return this._log(0, data);
+};
 
-  l.log(1, 'фыфвыф');
-  l.close();
-  setTimeout(function() { //more tests
-    l.log(1, '2');
-  }, 3000);
-})
+Logger.prototype.debug = function(data) {
+  return this._log(1, data);
+};
+
+Logger.prototype.info = function(data) {
+  return this._log(2, data);
+};
+
+Logger.prototype.error = function(data) {
+  return this._log(3, data);
+};
+
+Logger.prototype.critical = function(data) {
+  return this._log(4, data);
+};
