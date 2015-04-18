@@ -64,14 +64,15 @@ Logger.formatDate = function(date) {
 };
 
 
-Logger.prototype._log = function(level, data) {
+Logger.prototype._log = function(level, data, date) {
+  date = date || new Date();
   if (this._stream) {
     if (level >= this._level)
-      return this._stream.write(`${this.formatDate(new Date())} [${levels[level]}] ${data}${os.EOL}`);
+      return this._stream.write(`${this.formatDate(date)} [${levels[level]}] ${data}${os.EOL}`);
   } else {
     const self = this;
     this._ready.then(function() {
-      self._log(level, data);
+      self._log(level, data, date);
     });
   }
 };
@@ -104,3 +105,5 @@ Logger.prototype.error = function(data) {
 Logger.prototype.critical = function(data) {
   return this._log(4, data);
 };
+
+module.exports = Logger;
