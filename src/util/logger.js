@@ -10,12 +10,13 @@ const util = require('./util.js'),
   ],
   defaultLevel = levels.indexOf('TRACE');
 
-function Logger(fileName) {
-  const self = this;
+function Logger(fileName, openMark) {
+  openMark = (openMark === false) ? false : true;
   if ((typeof fileName !== 'string') || !fileName)
     throw new Error('\'fileName\' argument must be a non-empty string');
-  self._level = defaultLevel;
-  self.formatDate = Logger.formatDate;
+  this._level = defaultLevel;
+  this.formatDate = Logger.formatDate;
+  const self = this;
   this._ready = new Promise(function(resolve, reject) {
     fs.open(fileName, 'a', 0o644, function(err, fd) {
       if (err) {
@@ -29,6 +30,8 @@ function Logger(fileName) {
       }
     });
   });
+  if (openMark)
+    self.debug('======= Log opened! =======');
 }
 
 Logger.prototype.setLevel = function(level) {

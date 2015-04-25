@@ -3,7 +3,7 @@ const util = require('util');
 module.exports = util;
 exports = module.exports;
 
-function extend(target, source) {
+exports.extend = function extend(target, source) {
   for (const k in source) {
     if (source.hasOwnProperty(k)) {
       if (util.isObject(source[k]) && util.isObject(target[k])) {
@@ -16,13 +16,15 @@ function extend(target, source) {
   return target;
 };
 
-function padNumber(number, length) {
+exports.padNumber = function padNumber(number, length) {
   number = String(number);
   length = length || 2;
   while (number.length < length)
     number = '0' + number;
   return number;
-}
+};
 
-exports.padNumber = padNumber;
-exports.extend = extend;
+exports.toJSON = function toJSON(object, indent) {
+  indent = indent || 2;
+  return JSON.stringify(object, null, indent);
+};
