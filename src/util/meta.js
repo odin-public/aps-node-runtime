@@ -1,5 +1,5 @@
 module.exports = {
-	DIR_PREFIX: '1',
+	DIR_PREFIX: '',
 	CONFIG_DIR: '/etc/aps/node',
 	ENDPOINT_DIR: '/var/aps-node',
 	LOG_DIR: '/var/log',

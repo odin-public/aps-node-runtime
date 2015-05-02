@@ -7,42 +7,31 @@ const fs = require('fs'),
   meta = require('./util/meta.js'),
   Logger = require('./util/logger.js');
 
-meta.DIR_PREFIX = path.isAbsolute(meta.DIR_PREFIX) ? meta.DIR_PREFIX : path.dirname(__filename);
+meta.DIR_PREFIX = path.isAbsolute(meta.DIR_PREFIX) ? meta.DIR_PREFIX : __dirname;
 
-const mainLogFile = path.resolve(meta.DIR_PREFIX, meta.LOG_DIR, 'aps-node.log'),
-  l = new Logger(mainLogFile);
+const logFile = path.resolve(meta.DIR_PREFIX, meta.LOG_DIR, 'aps-node.log'),
+  l = new Logger(logFile);
 
-function stop(code) {
-  if (code === false)
-    return Promise.reject(false);
-  code = code || 1;
-  l.critical(`Fatal error has occurred. Stopping daemon.`);
-  l.close().then(function() {
-    process.exit(code);
-  });
-  return Promise.reject(false);
-}
-
-l.setLevel(0).isReady().then(function() {
+function main() {
   l.info('Starting APS io.js daemon!');
   l.debug('Reading configuration...');
   return Promise.all([
     new Promise(function(resolve, reject) {
       l.trace('Reading \'config.json\'');
-      const file = path.resolve(meta.DIR_PREFIX, meta.CONFIG_DIR, 'config1.json');
-      fs.readFile(file, function(err, data) {
+      const file = path.resolve(meta.DIR_PREFIX, meta.CONFIG_DIR, 'config.json');
+      fs.readFile(file, {
+        encoding: 'utf-8'
+      }, function(err, data) {
         if (err) {
           l.critical(`Unable to open main configuration file at '${file}': ${err.message}`);
           reject(err.errno);
         } else
           resolve(data);
-      })
-      l.critical(`Unable to read endpoints directory at '${dir}': ${err.message}`);
-      reject(err.errno);
+      });
     }),
     new Promise(function(resolve, reject) {
       l.trace('Reading \'endpoints\' directory');
-      const dir = path.resolve(meta.DIR_PREFIX, meta.CONFIG_DIR, 'endpoint');
+      const dir = path.resolve(meta.DIR_PREFIX, meta.CONFIG_DIR, 'endpoints');
       fs.readdir(dir, function(err, files) {
         if (err) {
           l.critical(`Unable to list endpoints directory at '${dir}': ${err.message}`);
@@ -51,12 +40,24 @@ l.setLevel(0).isReady().then(function() {
           resolve(files);
       });
     })
-  ]);
+  ]).then(function(values) {
+    l.debug(util.inspect(values));
+  });
+  //process.setgid(meta.USER);
+  //process.setuid(meta.USER);
+}
+
+l.setLevel(0).isReady().then(function() {
+  try {
+    return main();
+  } catch (e) {
+    l.critical(`Exception in main daemon: ${e instanceof Error ? e.stack : util.inspect(e)}`);
+    return Promise.reject(1);
+  }
 }, function(reason) {
-  //fail: unable to open main log
-  console.error(`Unable to open main log at '${mainLogFile}': ${reason}`);
-  process.exit(1);
-}).then(function(values) {
-}, stop).then(function() {
-  console.log('lel');
+  console.error(`Unable to open main log at '${logFile}': ${reason}`);
+  return Promise.reject(1);
+}).catch(function(code) {
+  process.exitCode = code;
+  l.close().then(process.exit);
 });

@@ -70,8 +70,11 @@ Logger.formatDate = function(date) {
 Logger.prototype._log = function(level, data, date) {
   date = date || new Date();
   if (this._stream) {
-    if (level >= this._level)
-      return this._stream.write(`${this.formatDate(date)} [${levels[level]}] ${data}${os.EOL}`);
+    if ((level >= this._level) && !this._stream.closed) {
+      try {
+        return this._stream.write(`${this.formatDate(date)} [${levels[level]}] ${data}${os.EOL}`);
+      } catch(_) {}
+    }
   } else {
     const self = this;
     this._ready.then(function() {
