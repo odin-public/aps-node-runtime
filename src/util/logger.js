@@ -1,115 +1,127 @@
-const util = require('./util.js'),
-  fs = require('fs'),
+const Promise = require('bluebird'),
+  util = require('./util.js'),
+  fs = Promise.promisifyAll(require('fs')),
   os = require('os'),
+  moment = require('moment'),
   levels = [
     'TRACE',
     'DEBUG',
     'INFO',
-    'ERROR',
-    'CRITICAL'
-  ],
-  defaultLevel = levels.indexOf('TRACE');
+    'WARNING',
+    'ERROR'
+  ];
 
-function Logger(fileName, openMark) {
-  openMark = (openMark === false) ? false : true;
-  if ((typeof fileName !== 'string') || !fileName)
-    throw new Error('\'fileName\' argument must be a non-empty string');
-  this._level = defaultLevel;
-  this.formatDate = Logger.formatDate;
-  const self = this;
-  this._ready = new Promise(function(resolve, reject) {
-    fs.open(fileName, 'a', 0o644, function(err, fd) {
-      if (err) {
-        reject(err);
-      } else {
-        self._stream = fs.createWriteStream(null, {
-          encoding: 'utf-8',
-          fd: fd
-        });
-        resolve(self);
-      }
+class Logger {
+  constructor(path, openMark) {
+    openMark = (openMark === false ? false : true);
+    if ((typeof path !== 'string') || !path)
+      throw new TypeError('\'path\' argument must be a non-empty string');
+    this.path = path;
+    const self = this;
+    (this._ready = fs.openAsync(path, 'a', 0o644)).then(function(fd) {
+      self._stream = fs.createWriteStream(undefined, {
+        encoding: 'utf-8',
+        fd
+      });
+      self._writePending();
     });
-  });
-  if (openMark)
-    self.debug('======= Log opened! =======');
+    if (openMark)
+      this._log(-1, '======= Log was opened =======');
+  }
+
+  set level(level) {
+    if (typeof level !== 'number')
+      throw new TypeError('\'level\' argument must be a number taken from \'Logger\' class');
+    if (level in levels)
+      this._level = level;
+    else
+      throw new RangeError(`Log level not found: ${level}`);
+  }
+
+  get level() {
+    return levels[this._level];
+  }
+
+  _write(date, level, data) {
+    if (this._stream.closed)
+      return null;
+    date = moment(date);
+    if (level === -1)
+      return this._stream.write(`${date.format(this.dateFormat)} ${data}${os.EOL}`);
+    if (level >= this._level)
+      return this._stream.write(`${date.format(this.dateFormat)} [${levels[level]}] ${data}${os.EOL}`);
+  }
+
+  _log(level, data) {
+    const date = new Date();
+    if (!this.isActive())
+      return this._pending.push([date, level, data]);
+    return this._write(date, level, data);
+  }
+
+  _writePending() {
+    if (!this.isActive())
+      return false;
+    let count = 0;
+    while(this._pending.length) {
+      this._write.apply(this, this._pending.shift());
+      count++;
+    }
+    return count;
+  }
+
+  pause() {
+    if (this._paused)
+      return false;
+    return this._paused = true;
+  }
+
+  unpause() {
+    delete this._paused;
+    return this._writePending();
+  }
+
+  dropPending() {
+    const length = this._pending.length;
+    this._pending.length = 0;
+    return length;
+  }
+
+  isPaused() {
+    return '_paused' in this;
+  }
+
+  set ready(v) {
+    throw new Error('\'ready\' property can only be set by constructor');
+  }
+
+  get ready() {
+    return this._ready;
+  }
+
+  isReady() {
+    if (!this._ready.isPending())
+      return this._stream.closed ? false : this._ready.isFulfilled();
+  }
+
+  isActive() {
+    return this.isReady() && !this.isPaused();
+  }
+
+  close() {
+    this.unpause();
+    return this._stream.endAsync();
+  }
 }
 
-Logger.prototype.setLevel = function(level) {
-  switch (typeof level) {
-    case 'string':
-      {
-        const index = levels.indexOf(level);
-        if (index !== -1)
-          this._level = index;
-        else
-          throw new Error(`Log level '${level}' not found`);
-        break;
-      }
-    case 'number':
-      if (level in levels)
-        this._level = level;
-      else
-        throw new Error(`No such log level: ${level}`);
-      break;
-    default:
-      throw new Error('\'level\' argument must be a number or a string');
-  }
-  return this;
-};
+Logger.prototype.level = 0;
+Logger.prototype.dateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
+Logger.prototype._pending = [];
 
-Logger.prototype.isReady = function() {
-  return this._ready;
-};
-
-Logger.formatDate = function(date) {
-  const pad = util.padNumber;
-  return `${date.getFullYear()}-${pad(date.getMonth(), 2)}-${pad(date.getDay(), 2)} ${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(),2)}.${pad(date.getMilliseconds(),3)}`;
-};
-
-
-Logger.prototype._log = function(level, data, date) {
-  date = date || new Date();
-  if (this._stream) {
-    if ((level >= this._level) && !this._stream.closed) {
-      try {
-        return this._stream.write(`${this.formatDate(date)} [${levels[level]}] ${data}${os.EOL}`);
-      } catch(_) {}
-    }
-  } else {
-    const self = this;
-    this._ready.then(function() {
-      self._log(level, data, date);
-    });
-  }
-};
-
-Logger.prototype.close = function() {
-  const self = this;
-  return new Promise(function(resolve, reject) {
-    self._stream.end(function() {
-      resolve(self);
-    });
-  });
-};
-
-Logger.prototype.trace = function(data) {
-  return this._log(0, data);
-};
-
-Logger.prototype.debug = function(data) {
-  return this._log(1, data);
-};
-
-Logger.prototype.info = function(data) {
-  return this._log(2, data);
-};
-
-Logger.prototype.error = function(data) {
-  return this._log(3, data);
-};
-
-Logger.prototype.critical = function(data) {
-  return this._log(4, data);
-};
+levels.forEach(function(v, k) {
+  Logger.prototype[v.toLowerCase()] = util.bind(function(k, data) {
+    return this._log(k, data);
+  }, Logger[v] = k);
+});
 
 module.exports = Logger;
