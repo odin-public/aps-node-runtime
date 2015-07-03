@@ -1,29 +1,31 @@
-const Promise = require('bluebird'),
-  util = require('./util.js'),
-  fs = Promise.promisifyAll(require('fs')),
-  os = require('os'),
-  moment = require('moment'),
-  levels = [
-    'TRACE',
-    'DEBUG',
-    'INFO',
-    'WARNING',
-    'ERROR'
-  ];
+import Promise from 'bluebird';
+import util from './util.js';
+import fs from 'fs';
+import os from 'os';
+import moment from 'moment';
 
-class Logger {
-  constructor(path, openMark) {
-    openMark = (openMark === false ? false : true);
+Promise.promisifyAll(fs);
+
+const levels = [
+  'TRACE',
+  'DEBUG',
+  'INFO',
+  'WARNING',
+  'ERROR'
+];
+
+export default class Logger {
+  constructor(path, openMark = true) {
     if ((typeof path !== 'string') || !path)
       throw new TypeError('\'path\' argument must be a non-empty string');
     this.path = path;
     const self = this;
-    (this._ready = fs.openAsync(path, 'a', 0o644)).then(function(fd) {
-      self._stream = fs.createWriteStream(undefined, {
+    (this._ready = fs.openAsync(path, 'a', 0o644)).then(fd => {
+      this._stream = fs.createWriteStream(undefined, {
         encoding: 'utf-8',
         fd
       });
-      self._writePending();
+      this._writePending();
     });
     if (openMark)
       this._log(-1, '======= Log was opened =======');
@@ -42,28 +44,38 @@ class Logger {
     return levels[this._level];
   }
 
-  _write(date, level, data) {
+  _getPrefixes() {
+    if (Array.isArray(this.prefixes))
+      return this.prefixes.length ? this.prefixes.slice() : null;
+    else {
+      this.prefixes = [];
+      return null;
+    }
+  }
+
+  _write(date, level, prefixes, data) {
     if (this._stream.closed)
       return null;
-    date = moment(date);
+    date = moment(date).format(this.dateFormat);
     if (level === -1)
-      return this._stream.write(`${date.format(this.dateFormat)} ${data}${os.EOL}`);
+      return this._stream.write(`${date} ${prefixes ? prefixes.join('') : ''} ${data}${os.EOL}`);
     if (level >= this._level)
-      return this._stream.write(`${date.format(this.dateFormat)} [${levels[level]}] ${data}${os.EOL}`);
+      return this._stream.write(`${date} [${levels[level]}]${prefixes ? prefixes.join('') : ''} ${data}${os.EOL}`);
   }
 
   _log(level, data) {
-    const date = new Date();
+    const date = new Date(),
+      prefixes = this._getPrefixes();
     if (!this.isActive())
-      return this._pending.push([date, level, data]);
-    return this._write(date, level, data);
+      return this._pending.push([date, level, prefixes, data]);
+    return this._write(date, level, prefixes, data);
   }
 
   _writePending() {
     if (!this.isActive())
       return false;
     let count = 0;
-    while(this._pending.length) {
+    while (this._pending.length) {
       this._write.apply(this, this._pending.shift());
       count++;
     }
@@ -92,7 +104,7 @@ class Logger {
   }
 
   set ready(v) {
-    throw new Error('\'ready\' property can only be set by constructor');
+    throw new Error('Logger readiness state can only be set by the constructor');
   }
 
   get ready() {
@@ -116,12 +128,11 @@ class Logger {
 
 Logger.prototype.level = 0;
 Logger.prototype.dateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
+Logger.prototype.prefixes = [];
 Logger.prototype._pending = [];
 
-levels.forEach(function(v, k) {
+levels.forEach((v, k) => {
   Logger.prototype[v.toLowerCase()] = util.bind(function(k, data) {
     return this._log(k, data);
   }, Logger[v] = k);
 });
-
-module.exports = Logger;

@@ -1,47 +1,53 @@
 if (require.main !== module)
   throw new Error('This is the main entry point for APS io.js runtime, do not attempt to use it inside \'require\'');
 
-const Promise = require('bluebird'),
-  fs = Promise.promisifyAll(require('fs')),
-  path = require('path'),
-  util = require('./util/util.js'),
-  config = require('./util/config.js'),
-  Logger = require('./util/logger.js');
+import Promise from 'bluebird';
+import fs from 'fs';
+import path from 'path';
+import util from './util/util.js';
+import c from './util/constants.js';
+import Logger from './util/logger.js';
 
-config.DIR_PREFIX = path.isAbsolute(config.DIR_PREFIX) ? config.DIR_PREFIX : __dirname;
+Promise.promisifyAll(fs);
 
-let mainConfig = null;
+c.DIR_PREFIX = path.isAbsolute(c.DIR_PREFIX) ? c.DIR_PREFIX : __dirname;
 
-const endpoints = [],
-  resolvePath = path.resolve.bind(undefined, config.DIR_PREFIX),
-  l = new Logger(resolvePath(config.LOG_DIR, 'aps-node.log'));
+const exitCodes = {
+    GENERAL_FAILURE: 1
+  },
+  PORT_LOWER_BOUND = 0,
+  PORT_UPPER_BOUND = 65536,
+  getAssetPath = util.bind(path.resolve, c.DIR_PREFIX),
+  l = new Logger(getAssetPath(c.LOG_DIR, 'aps-node.log'));
+
+let mainConfig,
+  endpoints;
 
 console.info(`Opening main log: '${l.path}'...`);
 
 l.pause();
-l.ready.then(start, function(reason) {
+l.ready.then(start, reason => {
   console.error(`Unable to open main log: ${reason}`);
-  throw 1;
-}).catch(function(reason) {
-  let code = 1;
+  throw exitCodes.GENERAL_FAILURE;
+}).catch(reason => {
+  let code = exitCodes.GENERAL_FAILURE;
   if (util.isNumber(reason))
     code = reason;
   else if (util.isError(reason))
     l.error(`Unexpected error in main daemon: ${reason.stack}`);
   else
     l.error(`Caught unknown object from main daemon code: ${util.inspect(reason)}`);
-  l.close().then(util.bind(process.exit, code));
+  l.close().then(() => process.exit(code));
 });
 
 function start() {
   console.info('Main log has been opened. Starting daemon!');
   l.info('Starting APS io.js daemon!');
-  l.info('Reading configuration...');
-  const endpointsPath = resolvePath(config.CONFIG_DIR, 'endpoints'),
-    configPath = resolvePath(config.CONFIG_DIR, 'config.json');
+  const endpointsPath = getAssetPath(c.CONFIG_DIR, 'endpoints'),
+    configPath = getAssetPath(c.CONFIG_DIR, 'config.json');
   l.info(`Reading main configuration file: '${configPath}'...`);
   l.info(`Listing endpoints directory: '${endpointsPath}'...`);
-  return Promise.join(fs.readFileAsync(configPath).then(function(text) {
+  return Promise.join(fs.readFileAsync(configPath, 'utf-8').then(text => {
     l.debug('Main configuration file was read successfully!');
     l.trace(`Main configuration file contents:\n${text}`);
     try {
@@ -53,40 +59,68 @@ function start() {
       l.warning(`Failed to parse main configuration file contents: ${e.message}`);
       throw null;
     }
-  }, function(reason) {
+  }, reason => {
     l.warning(`Failed to read main configuration file: ${reason.message}!`);
     throw null;
-  }).reflect(), fs.readdirAsync(endpointsPath).then(function(files) {
+  }).reflect(), fs.readdirAsync(endpointsPath).then(files => {
     l.debug('Endpoints directory was listed successfully!');
-    l.trace(`Endpoints directory listing: '${files.join('\', \'')}'`);
-    return files;
-  }, function(reason) {
+    if (files.length) {
+      l.trace(`Endpoints directory listing: '${files.join('\', \'')}'`);  
+      return files;
+    } else {
+      l.error(`Endpoints directory is empty. Nothing to do!`);
+      throw exitCodes.GENERAL_FAILURE;
+    }    
+  }, reason => {
     l.error(`Failed to list endpoints directory: ${reason.message}`);
-    throw 1;
-  }), function(fileConfig, endpointsListing) {
-    l.trace();
+    throw exitCodes.GENERAL_FAILURE;
+  }), (fileConfig, endpointsList) => {
+    l.debug('Computing main configuration...');
     if (fileConfig.isFulfilled()) {
-      l.info('Using main configuration from file!');
-      mainConfig = util.extend(fileConfig.value(), config.MAIN_CONFIG);
+      l.info('Using custom main configuration from file!');
+      mainConfig = fileConfig.value();
     } else {
       l.info('Unable to use main configuration file. Using default configuration!');
-      mainConfig = config.MAIN_CONFIG;
+      mainConfig = {};
     }
-    l.trace(`Main configuration object after merge:\n${util.stringify(mainConfig)}`);
-    try {
-      l.level = Logger[mainConfig.logLevel.toUpperCase()];
-      l.info(`Log level set to: '${l.level}'!`);
-    } catch (e) {
-      l.warning(`Unable to set log level to: '${mainConfig.logLevel}'. Using '${config.MAIN_CONFIG.logLevel}'!`);
-      l.level = Logger[config.MAIN_CONFIG.logLevel];
+    l.trace(`Main configuration was set to:\n${util.stringify(mainConfig)}`);
+    l.debug('Computing log level...');
+    if ('logLevel' in mainConfig) {
+      try {
+        l.debug('Attempting to use custom log level...');
+        l.level = Logger[mainConfig.logLevel.toUpperCase()];
+      } catch (e) {
+        l.warning(`Using default log level. Custom value is invalid: '${mainConfig.logLevel}'`);
+        l.level = Logger[c.MAIN_CONFIG.logLevel];
+      }
+    } else {
+      l.warning('Using default log level. No custom value specified!');
+      l.level = Logger[c.MAIN_CONFIG.logLevel];
     }
+    mainConfig.logLevel = Logger[l.level];
+    l.info(`Log level set to: '${l.level}'. Logger will now be unpaused!`);
     l.unpause();
-    l.info('Processing endpoint configuration files...');
-    l.debug('Filtering endpoints directory file list (*.json)...');
-    let endpointFiles = endpointsListing.filter(function(v) {
-      return v.endsWith('.json');
-    });
-    l.info(`Reading the following endpoint configuration files: '${endpointFiles.join('\', \'')}'`);
+    l.debug('Computing default endpoint port...');
+    if ('defaultPort' in mainConfig) {
+      if (Number.isSafeInteger(mainConfig.defaultPort) && mainConfig.defaultPort > PORT_LOWER_BOUND && mainConfig.defaultPort < PORT_UPPER_BOUND) {
+        l.debug('Attempting to use custom default port...');
+        //already set
+      } else {
+        l.warning(`Using default default port. Custom value is invalid: '${mainConfig.defaultPort}'`);
+        mainConfig.defaultPort = c.MAIN_CONFIG.defaultPort;
+      }
+    } else {
+      l.warning('Using default default port. No custom value specified!');
+      mainConfig.defaultPort = c.MAIN_CONFIG.defaultPort;
+    }
+    l.info(`Default port set to: ${mainConfig.defaultPort}!`);
+    l.debug('Processing the endpoint configuration files...');
+    l.debug('Filtering files in the \'endpoints\' directory (*.json)...');
+    endpoints = endpointsList.filter(v => v.endsWith('.json'));
+    l.info(`Reading the following endpoint configuration files: '${endpoints.join('\', \'')}'...`);
+    return endpoints.map(v => fs.readFileAsync(path.resolve(endpointsPath, v), 'utf-8'));
+  }).then(enpointConfigs => {
+    console.log(enpointConfigs);
   });
 }
 
