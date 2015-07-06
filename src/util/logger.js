@@ -45,7 +45,6 @@ export default class Logger {
   }
 
   _write(date, level, prefix, data) {
-    console.log(arguments);
     if (this._stream.closed)
       throw new Error('Attempting to use a closed \'Logger\' instance');
     if (level === -1)
