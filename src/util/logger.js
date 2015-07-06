@@ -44,31 +44,24 @@ export default class Logger {
     return levels[this._level];
   }
 
-  _getPrefixes() {
-    if (Array.isArray(this.prefixes))
-      return this.prefixes.length ? this.prefixes.slice() : null;
-    else {
-      this.prefixes = [];
-      return null;
-    }
-  }
-
-  _write(date, level, prefixes, data) {
+  _write(date, level, prefix, data) {
+    console.log(arguments);
     if (this._stream.closed)
-      return null;
-    date = moment(date).format(this.dateFormat);
+      throw new Error('Attempting to use a closed \'Logger\' instance');
     if (level === -1)
-      return this._stream.write(`${date} ${prefixes ? prefixes.join('') : ''} ${data}${os.EOL}`);
-    if (level >= this._level)
-      return this._stream.write(`${date} [${levels[level]}]${prefixes ? prefixes.join('') : ''} ${data}${os.EOL}`);
+      level = '';
+    else if (level >= this._level)
+      level = `[${levels[level]}]`;
+    else
+      return;
+    return this._stream.write(`${moment(date).format(this.dateFormat)} ${level}${prefix === undefined ? '' : prefix} ${data}${os.EOL}`);
   }
 
-  _log(level, data) {
-    const date = new Date(),
-      prefixes = this._getPrefixes();
+  _log(level, data, prefix) {
+    const date = new Date();
     if (!this.isActive())
-      return this._pending.push([date, level, prefixes, data]);
-    return this._write(date, level, prefixes, data);
+      return this._pending.push([date, level, prefix, data]);
+    return this._write(date, level, prefix, data);
   }
 
   _writePending() {
@@ -80,6 +73,10 @@ export default class Logger {
       count++;
     }
     return count;
+  }
+
+  addPrefix(prefix) {
+    return new LoggerProxy(this, prefix);
   }
 
   pause() {
@@ -128,11 +125,24 @@ export default class Logger {
 
 Logger.prototype.level = 0;
 Logger.prototype.dateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
-Logger.prototype.prefixes = [];
 Logger.prototype._pending = [];
 
+class LoggerProxy {
+  constructor(logger, prefix) {
+    if (!((logger instanceof Logger) || (logger instanceof LoggerProxy)))
+      throw new TypeError('\'logger\' is expected to be either \'Logger\' or \'LoggerProxy\', please use \'addPrefix\' method instead of manual instantiation');
+    this._logger = logger;
+    this._prefix = prefix;
+  }
+  _log(level, data, prefix) {
+    this._logger._log(level, data, (prefix === undefined ? this._prefix : this._prefix + prefix));
+  }
+}
+
+LoggerProxy.prototype.addPrefix = Logger.prototype.addPrefix;
+
 levels.forEach((v, k) => {
-  Logger.prototype[v.toLowerCase()] = util.bind(function(k, data) {
+  Logger.prototype[v.toLowerCase()] = LoggerProxy.prototype[v.toLowerCase()] = util.bind(function(k, data) {
     return this._log(k, data);
   }, Logger[v] = k);
 });
