@@ -1,39 +1,51 @@
 import Promise from 'bluebird';
-import util from './util.js';
 import fs from 'fs';
 import os from 'os';
 import moment from 'moment';
+import EventEmitter from 'events';
+import util from './util.js';
 
 Promise.promisifyAll(fs);
 
 const levels = [
-  'TRACE',
-  'DEBUG',
-  'INFO',
-  'WARNING',
-  'ERROR'
-];
+    'TRACE',
+    'DEBUG',
+    'INFO',
+    'WARNING',
+    'ERROR'
+  ],
+  LEVEL_NOLEVEL = -1,
+  openMark = '======= Log was opened =======';
 
-export default class Logger {
-  constructor(path, openMark = true) {
+export class Logger {
+  constructor(path, mode, writeOpenMark = true) {
     if ((typeof path !== 'string') || !path)
       throw new TypeError('\'path\' argument must be a non-empty string');
+    if (!Number.isSafeInteger(mode)) {
+      writeOpenMark = mode;
+      mode = 0o644;
+    }
     this.path = path;
-    const self = this;
-    (this._ready = fs.openAsync(path, 'a', 0o644)).then(fd => {
+    this._pending = [];
+    this._emitters = [];
+    this._handlgeLogEvent = (level, data, prefix) => {
+      this._log(level, data, prefix);
+    };
+    (this._ready = fs.openAsync(path, 'a', mode)).then(fd => {
       this._stream = fs.createWriteStream(undefined, {
         encoding: 'utf-8',
         fd
       });
       this._writePending();
+      return this;
     });
-    if (openMark)
-      this._log(-1, '======= Log was opened =======');
+    if (writeOpenMark)
+      this._log(LEVEL_NOLEVEL, openMark);
   }
 
   set level(level) {
     if (typeof level !== 'number')
-      throw new TypeError('\'level\' argument must be a number taken from \'Logger\' class');
+      throw new TypeError('New level must be a number taken from \'Logger\' class');
     if (level in levels)
       this._level = level;
     else
@@ -47,16 +59,21 @@ export default class Logger {
   _write(date, level, prefix, data) {
     if (this._stream.closed)
       throw new Error('Attempting to use a closed \'Logger\' instance');
-    if (level === -1)
+    if (level === LEVEL_NOLEVEL)
       level = '';
     else if (level >= this._level)
       level = `[${levels[level]}]`;
     else
       return;
-    return this._stream.write(`${moment(date).format(this.dateFormat)} ${level}${prefix === undefined ? '' : prefix} ${data}${os.EOL}`);
+    prefix = `${level}${prefix === undefined ? '' : prefix}`;
+    if (prefix)
+      prefix += ' ';
+    return this._stream.write(`${moment(date).format(this.dateFormat)} ${prefix}${data}${os.EOL}`);
   }
 
   _log(level, data, prefix) {
+    if (!((level in levels) || (level === LEVEL_NOLEVEL)))
+      throw new Error(`Cannot accept a message with unrecognized level: ${level}`);
     const date = new Date();
     if (!this.isActive())
       return this._pending.push([date, level, prefix, data]);
@@ -74,8 +91,35 @@ export default class Logger {
     return count;
   }
 
-  addPrefix(prefix) {
+  pushPrefix(prefix) {
     return new LoggerProxy(this, prefix);
+  }
+
+  attach(emitter) {
+    if (!(emitter instanceof EventEmitter))
+      throw new TypeError('\'emitter\' is expected to be \'LogEmitter\' or \'EventEmitter\'');
+    this._emitters.push(emitter);
+    emitter.on('log', this._handlgeLogEvent);
+  }
+
+  detach(emitter) {
+    let found = 0,
+      index;
+    while ((index = this._emitters.indexOf(emitter)) !== -1) {
+      emitter.removeListener('log', this._handlgeLogEvent)
+      this._emitters.splice(index, 1);
+      found++;
+    }
+    return found;
+  }
+
+  detachAll() {
+    let count = this._emitters.length;
+    this._emitters.forEach(v => {
+      v.removeListener('log', this._handlgeLogEvent);
+    });
+    this._emitters.length = 0;
+    return count;
   }
 
   pause() {
@@ -124,24 +168,41 @@ export default class Logger {
 
 Logger.prototype.level = 0;
 Logger.prototype.dateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
-Logger.prototype._pending = [];
 
-class LoggerProxy {
-  constructor(logger, prefix) {
-    if (!((logger instanceof Logger) || (logger instanceof LoggerProxy)))
-      throw new TypeError('\'logger\' is expected to be either \'Logger\' or \'LoggerProxy\', please use \'addPrefix\' method instead of manual instantiation');
-    this._logger = logger;
-    this._prefix = prefix;
-  }
+export class LogEmitter extends EventEmitter {
   _log(level, data, prefix) {
-    this._logger._log(level, data, (prefix === undefined ? this._prefix : this._prefix + prefix));
+    this.emit('log', level, data, prefix);
   }
 }
 
-LoggerProxy.prototype.addPrefix = Logger.prototype.addPrefix;
+class LoggerProxy {
+  constructor(logger, prefix) {
+    if (!((logger instanceof Logger) || (logger instanceof LoggerProxy) || (logger instanceof LogEmitter)))
+      throw new TypeError('\'logger\' is expected to be either \'Logger\', \'LoggerProxy\' or \'LogEmitter\', please use \'pushPrefix\' method instead of manual instantiation');
+    this._logger = logger;
+    this._prefix = prefix;
+    this._emitters = [];
+    this._handlgeLogEvent = (level, data, prefix) => {
+      this._log(level, data, prefix);
+    };
+  }
+
+  _log(level, data, prefix) {
+    this._logger._log(level, data, prefix === undefined ? this._prefix : this._prefix + prefix);
+  }
+}
+
+LoggerProxy.prototype.pushPrefix = LogEmitter.prototype.pushPrefix = Logger.prototype.pushPrefix;
+LoggerProxy.prototype.attach = Logger.prototype.attach;
+LoggerProxy.prototype.detach = Logger.prototype.detach;
+LoggerProxy.prototype.detachAll = Logger.prototype.detachAll;
 
 levels.forEach((v, k) => {
-  Logger.prototype[v.toLowerCase()] = LoggerProxy.prototype[v.toLowerCase()] = util.bind(function(k, data) {
+  Logger[v] = k;
+  v = v.toLowerCase();
+  Logger.prototype[v] = LoggerProxy.prototype[v] = LogEmitter.prototype[v] = function(data) {
     return this._log(k, data);
-  }, Logger[v] = k);
+  };
 });
+
+export default Logger;
