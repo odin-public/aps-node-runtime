@@ -3,12 +3,19 @@ export default {
   CONFIG_DIR: '/etc/aps/node',
   ENDPOINT_DIR: '/var/aps-node',
   LOG_DIR: '/var/log',
-  IDENTITY: 'aps-node',
+  USER: 'aps-node',
   MAIN_CONFIG: {
     logLevel: 'TRACE',
-    defaultPort: 443
+    defaultIP: '0.0.0.0',
+    defaultPort: 443,
+    defaultHost: null
   },
   ENDPOINT_CONFIG: {
-
+    logLevel: 'TRACE',
+    dummy: false
+  },
+  INSTANCE_CONFIG: {
+    logLevel: 'TRACE',
+    checkCertificate: true
   }
 };
