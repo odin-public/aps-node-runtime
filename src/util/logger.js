@@ -19,7 +19,7 @@ const levels = [
   openMark = '======= Log was opened =======';
 
 export class Logger {
-  constructor(path, mode, writeOpenMark = true) {
+  constructor(path, mode, writeOpenMark = true) { // TODO: fd-based and stream-based constructors
     if ((typeof path !== 'string') || !path)
       throw new TypeError('\'path\' argument must be a non-empty string');
     if (!Number.isSafeInteger(mode)) { //'shift' args
@@ -30,7 +30,7 @@ export class Logger {
     this._pending = [];
     this._emitters = new Set();
     (this.ready = fs.openAsync(path, 'a', mode)).then(fd => {
-      this._stream = fs.createWriteStream(undefined, {
+      this._stream = fs.createWriteStream(null, {
         encoding: 'utf-8',
         fd
       });
@@ -42,21 +42,27 @@ export class Logger {
   }
 
   static isLevel(level) {
-    if (level in levels)
-      return true;
-    return false;
+    return level in levels;
   }
 
-  static levelName(level) {
-    if (Logger.isLevel(level))
-      return levels[this._level];
+  static isLevelName(levelName) {
+    return !(levels.indexOf(levelName) === -1);
+  }
+
+  static set defaultDateFormat(dateFormat) {
+    this.prototype.dateFormat = String(dateFormat);
+  }
+
+  static get defaultDateFormat() {
+    return this.prototype.dateFormat;
   }
 
   set level(level) {
+    level = parseInt(level, 10);
     if (Logger.isLevel(level))
       this._level = level;
     else
-      throw new TypeError(`Log level not found: ${level}`);
+      throw new RangeError(`Log level not found: ${level}`);
   }
 
   get level() {
@@ -71,7 +77,7 @@ export class Logger {
     else
       return;
     prefix = `${level}${prefix === undefined ? '' : prefix}`;
-    if (prefix)
+    if (prefix.length > 0)
       prefix += ' ';
     return this._stream.write(`${moment(date).format(this.dateFormat)} ${prefix}${data}${os.EOL}`);
   }
@@ -133,19 +139,23 @@ export class Logger {
   }
 
   close() {
-    if ('_stream' in this) {
-      this._emitters.forEach(v => v.unpipe(this));
-      this.dropPending();
-      return this._stream.endAsync();
-    } else
+    if (this.ready.isPending())
       return this.ready.finally(() => {
         return this.close();
       });
+    else {
+      for (let v of this._emitters)
+        v.unpipe(this);
+      this.dropPending();
+      if ('_stream' in this)
+        return this._stream.endAsync();
+      return Promise.resolve();
+    }
   }
 }
 
 Logger.prototype.level = 0; // first index of level array
-Logger.prototype.dateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
+Logger.defaultDateFormat = 'YYYY-MM-DD HH:mm:ss.SSS';
 
 export class LogEmitter extends EventEmitter {
   constructor() {
@@ -186,6 +196,9 @@ export class LogEmitter extends EventEmitter {
     return this._receivers.size;
   }
 }
+
+LogEmitter.isLevel = Logger.isLevel;
+LogEmitter.isLevelName = Logger.isLevelName;
 
 class LoggerProxy {
   constructor(logger, prefix) {
