@@ -1,7 +1,6 @@
 import util from 'util';
 import 'util-is';
 
-
 const NETWORK_PORT_MIN = 0,
   NETWORK_PORT_MAX = 65536;
 
@@ -10,7 +9,7 @@ const extensions = {
     //return JSON.stringify(object, null, 2); //TODO: old impl, up to debate
     return util.inspect(arg, {
       showHidden: true,
-      depth: null,
+      depth: 3,
       customInspect: false
     });
   },
@@ -41,6 +40,42 @@ const extensions = {
         word += 's';
     }
     return word;
+  },
+  createUuid(max = Math.pow(2,32), radix = 16) { // yeah, yeah, non-uniform distribution
+    if ((max < 0) || (max > Math.pow(10,16)))
+      throw new RangeError('Maximum must be between 0 and 10^16');
+    const uuid = Math.round(Math.random() * max);
+    return Number.isSafeInteger(radix) ? uuid.toString(radix) : uuid;
+  },
+  pipeTree: function pipeTree(obj, prefix, opts) {
+    if (prefix === undefined) prefix = '';
+    if (!opts) opts = {};
+    var chr = function(s) {
+      var chars = {
+        '│': '|',
+        '└': '`',
+        '├': '+',
+        '─': '-',
+        '┬': '-'
+      };
+      return opts.unicode === false ? chars[s] : s;
+    };
+
+    if (typeof obj === 'string') obj = {
+      label: obj
+    };
+
+    var nodes = obj.nodes || [];
+    var lines = (obj.label || '').split('\n');
+    var splitter = '\n' + prefix + (nodes.length ? chr('│') : ' ') + ' ';
+
+    return prefix + lines.join(splitter) + '\n' + nodes.map(function(node, ix) {
+      var last = ix === nodes.length - 1;
+      var more = node.nodes && node.nodes.length;
+      var prefix_ = prefix + (last ? ' ' : chr('│')) + ' ';
+
+      return prefix + (last ? chr('└') : chr('├')) + chr('─') + (more ? chr('┬') : chr('─')) + ' ' + pipeTree(node, prefix_, opts).slice(prefix.length + 2);
+    }).join('');
   }
 };
 

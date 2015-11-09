@@ -40,7 +40,7 @@ export default class ConfigValidator {
             value = normalized;
           } else {
             level = 'error';
-            reason = `default, custom value: ${util.inspect(value)} is invalid for key: '${key}'`;
+            reason = `default, custom value: ${util.stringify(value)} is invalid for key: '${key}'`;
             value = Object.getPrototypeOf(config)[key];
           }
         } else {
@@ -51,8 +51,8 @@ export default class ConfigValidator {
         level = 'info';
         reason = 'no custom config';
       }
-      l[level](`${message} ${util.inspect(value)} (${reason})!`);
       result[key] = value;
+      l[level](`${message} ${util.stringify(value)} (${reason})!`);
     }
     return result;
   }

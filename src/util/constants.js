@@ -6,9 +6,9 @@ export default {
   USER: 'aps-node',
   MAIN_CONFIG: {
     logLevel: 'TRACE',
-    defaultIP: '0.0.0.0',
+    defaultHost: '0.0.0.0',
     defaultPort: 443,
-    defaultHost: null
+    defaultVirtualHost: null
   },
   ENDPOINT_CONFIG: {
     logLevel: 'TRACE',

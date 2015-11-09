@@ -4,8 +4,11 @@ if (require.main !== module)
 import Promise from 'bluebird';
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
+import tls from 'tls';
 import util from './util/util.js';
 import c from './util/constants.js';
+import KnownError from './util/knownError.js';
 import Logger from './util/logger.js';
 import ConfigValidator from './util/configValidator.js';
 import Router from './runtime/router.js';
@@ -19,29 +22,35 @@ function getAssetPath() {
   return path.resolve(c.DIR_PREFIX, ...arguments);
 }
 
-function send(message, type) { // this crap is blocked by iojs/#760, beware
+const ENDPOINT_CONFIG_SUFFIX = '.json',
+  MAIN_LOG_NAME = 'aps-node.log',
+  MAIN_CONFIG_NAME = 'config.json',
+  ENDPOINTS_DIR_NAME = 'endpoints',
+  TLS_KEY_NAME = 'daemon.key',
+  TLS_CERT_NAME = 'daemon.crt',
+  EXIT_GENERAL_FAILURE = 1,
+  l = new Logger(getAssetPath(c.LOG_DIR, MAIN_LOG_NAME));
+
+function send(message, type = 'error') { //TODO: this crap is affected by iojs/#760, beware
   return process.send({
-    type: type || 'error',
+    type,
     message
   });
 }
 
-const endpointConfigSuffix = '.json',
-  exitCodes = {
-    GENERAL_FAILURE: 1
-  },
-  l = new Logger(getAssetPath(c.LOG_DIR, 'aps-node.log'));
+function exit(code) {
+  l.unpause();
+  l.close().then(() => process.exit(code));
+}
 
 process
   .on('uncaughtException', error => {
     send(error.stack);
-    l.unpause();
-    l.close().then(() => process.exit(exitCodes.GENERAL_FAILURE));
+    exit(EXIT_GENERAL_FAILURE);
   })
   .on('unhandledRejection', reason => {
     send(util.isError(reason) ? reason.stack : reason);
-    l.unpause();
-    l.close().then(() => process.exit(exitCodes.GENERAL_FAILURE));
+    exit(EXIT_GENERAL_FAILURE);
   });
 
 process.send({
@@ -57,31 +66,33 @@ l.ready
     throw exitCodes.GENERAL_FAILURE;
   })
   .catch(reason => {
-    process.exitCode = exitCodes.GENERAL_FAILURE;
-    if (util.isNumber(reason))
-      process.exitCode = reason;
-    else if (util.isError(reason)) {
+    let message;
+    if (reason instanceof KnownError) {
+      send(reason.message);
+      message = reason.message;
+    } else if (reason instanceof Error) {
       send(reason.stack);
-      l.critical(`Unexpected error in main daemon code: ${reason.stack}`);
-    } else if (!util.isNullOrUndefined(reason)) {
-      process.send(reason);
-      l.critical(`Caught unknown object from main daemon code: ${util.inspect(reason)}`);
+      message = `Unexpected error in main daemon code: ${reason.stack}`;
+    } else {
+      send(reason);
+      message = `Caught unknown object from main daemon code: ${util.stringify(reason)}`;
     }
-    l.unpause();
-    l.close().then(() => process.exit());
+    l.critical(message);
+    exit(EXIT_GENERAL_FAILURE);
   });
 
 function start() {
-  let configPath,
-    endpointsPath,
-    mainConfig,
-    endpoints;
+  const configPath = getAssetPath(c.CONFIG_DIR, MAIN_CONFIG_NAME),
+    tlsKeyPath = getAssetPath(c.CONFIG_DIR, TLS_KEY_NAME),
+    tlsCertPath = getAssetPath(c.CONFIG_DIR, TLS_CERT_NAME),
+    endpointsPath = getAssetPath(c.CONFIG_DIR, ENDPOINTS_DIR_NAME);
+  let router;
   l.info('Starting APS Node.js daemon!');
-  endpointsPath = getAssetPath(c.CONFIG_DIR, 'endpoints');
-  l.info(`Listing endpoints directory: '${endpointsPath}'...`);
-  configPath = getAssetPath(c.CONFIG_DIR, 'config.json');
   l.info(`Reading main configuration file: '${configPath}'...`);
-  return Promise.join(fs.readFileAsync(configPath, 'utf-8').then(text => {
+  l.info(`Reading main TLS private key file: '${tlsKeyPath}'...`);
+  l.info(`Reading main TLS certificate file: '${tlsCertPath}'...`);
+  l.info(`Listing endpoints directory: '${endpointsPath}'...`);  
+  return Promise.join(fs.readFileAsync(configPath, 'utf-8').then(text => { //TODO: make custom config-reading function with length limit
     l.debug('Main configuration file was read successfully!');
     l.trace(`Main configuration file contents:\n${text}`);
     l.debug('Parsing main configuration file contents...');
@@ -98,68 +109,94 @@ function start() {
   }, reason => {
     l.error(`Failed to read main configuration file: ${reason.message}!`);
     throw null;
-  }).reflect(), fs.readdirAsync(endpointsPath).then(listing => {
+  }).reflect().then(config => {
+    l.debug('Computing main configuration...');
+    let validator;
+    if (config.isFulfilled()) {
+      l.info('Using custom main configuration from file!');
+      validator = new ConfigValidator(c.MAIN_CONFIG, config.value());
+    } else {
+      l.info('Unable to use main configuration file. Using default configuration!');
+      validator = new ConfigValidator(c.MAIN_CONFIG);
+    }
+    validator.logger.pipe(l);
+    config = validator.validate({
+      'logLevel': ['log level', v => {
+        if (!util.isNonEmptyString(v))
+          return;
+        v = v.toUpperCase();
+        return Logger.levelName(v) ? v : undefined;
+      }],
+      'defaultHost': ['default endpoint host identifier', v => (net.isIPv4(v) || util.isHostname(v)) ? v : undefined],
+      'defaultPort': ['default endpoint port', v => {
+        v = parseInt(v, 10);
+        return util.isPort(v) ? v : undefined;
+      }],
+      'defaultVirtualHost': ['default endpoint virtual host', v => ((v === null) || util.isHostname(v)) ? v.toLowerCase() : undefined]
+    });
+    validator.logger.unpipe(l);
+    l.level = Logger[config.logLevel];
+    l.unpause();
+    return config;
+  }), fs.readFileAsync(tlsKeyPath).then(text => { //TODO: custom cert paths or nobody cares?
+    l.debug('Main TLS private key file was read successfully!');
+    l.trace(`Main TLS private key file contents:\n${text}`);
+    l.debug('Validating main TLS private key file contents...');
+    try {
+      tls.createSecureContext({
+        key: text
+      });
+    } catch(e) {
+      throw new KnownError(`Failed to validate main TLS private key file contents: ${e.message}!`);
+    }
+    return text;
+  }, reason => {
+    throw new KnownError(`Failed to read main TLS private key file: ${reason.message}!`);
+  }), fs.readFileAsync(tlsCertPath).then(text => {
+    l.debug('Main TLS certificate file was read successfully!');
+    l.trace(`Main TLS certificate file contents:\n${text}`);
+    l.debug('Validating main TLS certificate file contents...');
+    try {
+      tls.createSecureContext({
+        cert: text
+      });
+    } catch(e) {
+      throw new KnownError(`Failed to validate main TLS certificate file contents: ${e.message}!`);
+    }
+    return text;
+  }, reason => {
+    throw new KnownError(`Failed to read main TLS certificate file: ${reason.message}!`);
+  }), fs.readdirAsync(endpointsPath).then(listing => {
     l.debug('Endpoints directory was listed successfully!');
     if (listing.length === 0) {
-      l.critical(`Endpoints directory is empty. Nothing to do!`);
-      throw exitCodes.GENERAL_FAILURE;
+      throw new KnownError(`Endpoints directory is empty. Nothing to do!`);
     } else {
       l.trace(`Endpoints directory listing: '${listing.join('\', \'')}'`);
       return listing;
     }
   }, reason => {
-    l.critical(`Failed to list endpoints directory: ${reason.message}`);
-    throw exitCodes.GENERAL_FAILURE;
-  }), (fileConfig, endpointsListing) => {
-    l.debug('Computing main configuration...');
-    let cv;
-    if (fileConfig.isFulfilled()) {
-      l.info('Using custom main configuration from file!');
-      cv = new ConfigValidator(c.MAIN_CONFIG, fileConfig.value());
-    } else {
-      l.info('Unable to use main configuration file. Using default configuration!');
-      cv = new ConfigValidator(c.MAIN_CONFIG);
-    }
-    cv.logger.pipe(l);
-    mainConfig = cv.validate({
-      'logLevel': ['log level', v => {
-        v = v.toUpperCase();
-        const oldValue = l.level;
-        try {
-          l.level = Logger[v];
-        } catch (e) {
-          return;
-        }
-        l.level = Logger[oldValue];
-        return v;
-      }],
-      'defaultIP': ['default endpoint IP', v => util.isIPv4(v) ? v : undefined],
-      'defaultPort': ['default endpoint port', v => {
-        v = parseInt(v, 10);
-        return util.isPort(v) ? v : undefined;
-      }],
-      'defaultHostname': ['default endpoint hostname', v => ((v === null) || util.isHostname(v)) ? v.toLowerCase() : undefined]
+    throw new KnownError(`Failed to list endpoints directory: ${reason.message}`);
+  }), (config, tlsKey, tlsCert, endpointsListing) => {
+    Endpoint.defaultHost = config.defaultHost;
+    Endpoint.defaultPort = config.defaultPort;
+    Endpoint.defaultVirtualHost = config.defaultVirtualHost;
+    Endpoint.defaultLogLevel = c.ENDPOINT_CONFIG.logLevel;
+    Endpoint.defaultDummy = c.ENDPOINT_CONFIG.dummy;
+    Endpoint.relativeHomeRoot = c.ENDPOINT_DIR;
+    l.debug(`Selecting configuration files in the endpoints directory (*${ENDPOINT_CONFIG_SUFFIX})...`);
+    const loggers = new Map(),
+      endpoints = endpointsListing.filter(v => (v.length > ENDPOINT_CONFIG_SUFFIX.length) && v.endsWith(ENDPOINT_CONFIG_SUFFIX)); //no dotfiles
+    if (endpoints.length === 0)
+      throw new KnownError(`No endpoint configuration files found (*${ENDPOINT_CONFIG_SUFFIX}). Nothing to do!`);
+    l.info(`Creating and passing control to the router with these endpoints: '${endpoints.join('\', \'')}'`);
+    router = new Router(tlsKey, tlsCert, endpoints.map(v => new Endpoint(path.resolve(endpointsPath, v))));
+    router.endpoints.forEach((v,k) => {
+      v.logger.pipe(l.pushPrefix(`[E:${k}]`));
     });
-    cv.logger.unpipe(l);
-    l.level = Logger[mainConfig.logLevel];
-    l.unpause();
-    Endpoint.defaultIP = mainConfig.defaultIP;
-    Endpoint.defaultPort = mainConfig.defaultPort;
-    Endpoint.defaultHostname = mainConfig.defaultHostname;
-    l.debug(`Selecting configuration files in the endpoints directory (*${endpointConfigSuffix})...`);
-    endpoints = endpointsListing.filter(v => (v.length > endpointConfigSuffix.length) && v.endsWith(endpointConfigSuffix)); // no dotfiles
-    if (endpoints.length === 0) {
-      l.critical(`No endpoint configuration files found (*${endpointConfigSuffix}). Nothing to do!`);
-      throw exitCodes.GENERAL_FAILURE;
-    }
-    l.info(`Creating the router with these endpoints: '${endpoints.join('\', \'')}'`);
-    const router = new Router(endpoints.map(v => new Endpoint(path.resolve(endpointsPath, v))));
-    router.logger.pipe(l);
-    return router.initialized;
-  }).then((count) => {
-    l.info(`Router was initialized with ${util.pluralize('endpoint', count, true)}...`);
-  }, reason => {
-    l.critical(`Router has failed to initialize: ${reason.message}!`);
-    throw exitCodes.GENERAL_FAILURE;
-  })//.then(); ready state
+    router.logger.pipe(l.pushPrefix('[Router]'));
+    return router.started.catch(() => {
+      throw new KnownError('Router was unable to start!');
+    });
+  });
+
 }
