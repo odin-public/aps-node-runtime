@@ -30,14 +30,15 @@ export default class Router {
     l.info('Initializing...', true);
     l.info('Waiting for endpoints to finish initialization...', true);
     this.table = new Map();
-    this.endpoints = new Map();
-    this.initialized = Promise.all(endpoints.map(v => {
-      this.endpoints.set(util.createUuid(Math.pow(2, 12)), v); //arbitrary upper bound that is not too big and not too small, to avoid collisions, 12 bits aka 3 hex chars here
+    this.endpoints = endpoints.slice(); //copy that
+    this.endpointIds = new Map();
+    this.initialized = Promise.all(this.endpoints.map(v => {
+      this.endpointIds.set(v, util.createUuid(Math.pow(2, 12))); //arbitrary upper bound that is not too big and not too small, to avoid collisions, 12 bits aka 3 hex chars here
       return v.initialized.reflect();
     })).then(() => {
       l.debug('Attaching endpoints. Dropping endpoints that failed to initialize...');
       const dropped = [];
-      this.endpoints.forEach(v => {
+      this.endpoints.forEach((v, k) => {
         if (v.initialized.isFulfilled()) {
           try {
             this._attachEndpoint(v);
@@ -45,7 +46,7 @@ export default class Router {
             l.error(`Dropping initialized endpoint with key: '${v.key}', reason: ${e.message}`);
           }
         } else {
-          this.endpoints.delete(v);
+          this.endpoints.splice(k, 1);
           dropped.push(v);
         }
       });
@@ -78,7 +79,7 @@ export default class Router {
             throw k;
         });
       } catch(host) {
-        throw new Error(`Port ${endpoint.port} is already taken for '${host}'`);
+        throw new Error(`Port ${endpoint.port} is already taken for '${host}', can't use it for IPv4_ANY ('${IPV4_ANY}')`);
       }
     } else {
       if ((item = this.table.get(IPV4_ANY)) && (item.get(endpoint.port)))

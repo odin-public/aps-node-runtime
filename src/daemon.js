@@ -182,7 +182,7 @@ function start() {
     Endpoint.defaultVirtualHost = config.defaultVirtualHost;
     Endpoint.defaultLogLevel = c.ENDPOINT_CONFIG.logLevel;
     Endpoint.defaultDummy = c.ENDPOINT_CONFIG.dummy;
-    Endpoint.relativeHomeRoot = c.ENDPOINT_DIR;
+    Endpoint.relativeHomeRoot = getAssetPath(c.ENDPOINT_DIR);
     l.debug(`Selecting configuration files in the endpoints directory (*${ENDPOINT_CONFIG_SUFFIX})...`);
     const loggers = new Map(),
       endpoints = endpointsListing.filter(v => (v.length > ENDPOINT_CONFIG_SUFFIX.length) && v.endsWith(ENDPOINT_CONFIG_SUFFIX)); //no dotfiles
@@ -190,13 +190,12 @@ function start() {
       throw new KnownError(`No endpoint configuration files found (*${ENDPOINT_CONFIG_SUFFIX}). Nothing to do!`);
     l.info(`Creating and passing control to the router with these endpoints: '${endpoints.join('\', \'')}'`);
     router = new Router(tlsKey, tlsCert, endpoints.map(v => new Endpoint(path.resolve(endpointsPath, v))));
-    router.endpoints.forEach((v,k) => {
-      v.logger.pipe(l.pushPrefix(`[E:${k}]`));
+    router.endpointIds.forEach((v, k) => {
+      k.logger.pipe(l.pushPrefix(`[E:${v}]`));
     });
     router.logger.pipe(l.pushPrefix('[Router]'));
     return router.started.catch(() => {
       throw new KnownError('Router was unable to start!');
     });
   });
-
 }
