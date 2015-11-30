@@ -147,8 +147,11 @@ export class Logger {
       for (let v of this._emitters)
         v.unpipe(this);
       this.dropPending();
-      if ('_stream' in this)
-        return this._stream.endAsync();
+      if ('_stream' in this) {
+        const promise = this._stream.endAsync();
+        delete this._stream;
+        return promise;
+      }
       return Promise.resolve();
     }
   }
@@ -173,10 +176,7 @@ export class LogEmitter extends EventEmitter {
   }
 
   unpipe(receiver) {
-    let found = 0;
-    while (this._receivers.delete(receiver))
-      found++;
-    return found;
+    return this._receivers.delete(receiver);
   }
 
   unpipeAll() {

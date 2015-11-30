@@ -23,13 +23,13 @@ function getAssetPath() {
 }
 
 const ENDPOINT_CONFIG_SUFFIX = '.json',
-  MAIN_LOG_NAME = 'aps-node.log',
-  MAIN_CONFIG_NAME = 'config.json',
+  LOG_NAME = 'aps-node.log',
+  CONFIG_NAME = 'config.json',
   ENDPOINTS_DIR_NAME = 'endpoints',
   TLS_KEY_NAME = 'daemon.key',
   TLS_CERT_NAME = 'daemon.crt',
   EXIT_GENERAL_FAILURE = 1,
-  l = new Logger(getAssetPath(c.LOG_DIR, MAIN_LOG_NAME));
+  l = new Logger(getAssetPath(c.LOG_DIR, LOG_NAME));
 
 function send(message, type = 'error') { //TODO: this crap is affected by iojs/#760, beware
   return process.send({
@@ -63,7 +63,7 @@ l.pause();
 l.ready
   .then(start, reason => {
     send(`Unable to open main log: ${reason}`);
-    throw exitCodes.GENERAL_FAILURE;
+    throw EXIT_GENERAL_FAILURE;
   })
   .catch(reason => {
     let message;
@@ -82,7 +82,7 @@ l.ready
   });
 
 function start() {
-  const configPath = getAssetPath(c.CONFIG_DIR, MAIN_CONFIG_NAME),
+  const configPath = getAssetPath(c.CONFIG_DIR, CONFIG_NAME),
     tlsKeyPath = getAssetPath(c.CONFIG_DIR, TLS_KEY_NAME),
     tlsCertPath = getAssetPath(c.CONFIG_DIR, TLS_CERT_NAME),
     endpointsPath = getAssetPath(c.CONFIG_DIR, ENDPOINTS_DIR_NAME);
@@ -119,7 +119,7 @@ function start() {
       l.info('Unable to use main configuration file. Using default configuration!');
       validator = new ConfigValidator(c.MAIN_CONFIG);
     }
-    validator.logger.pipe(l);
+    validator.logEmitter.pipe(l);
     config = validator.validate({
       'logLevel': ['log level', v => {
         if (!util.isNonEmptyString(v))
@@ -132,9 +132,9 @@ function start() {
         v = parseInt(v, 10);
         return util.isPort(v) ? v : undefined;
       }],
-      'defaultVirtualHost': ['default endpoint virtual host', v => ((v === null) || util.isHostname(v)) ? v.toLowerCase() : undefined]
+      'defaultVirtualHost': ['default endpoint virtual host', v => ((v === null) || (net.isIPv4(v) || util.isHostname(v))) ? v.toLowerCase() : undefined]
     });
-    validator.logger.unpipe(l);
+    validator.logEmitter.unpipe(l);
     l.level = Logger[config.logLevel];
     l.unpause();
     return config;
@@ -190,12 +190,15 @@ function start() {
       throw new KnownError(`No endpoint configuration files found (*${ENDPOINT_CONFIG_SUFFIX}). Nothing to do!`);
     l.info(`Creating and passing control to the router with these endpoints: '${endpoints.join('\', \'')}'`);
     router = new Router(tlsKey, tlsCert, endpoints.map(v => new Endpoint(path.resolve(endpointsPath, v))));
-    router.endpointIds.forEach((v, k) => {
-      k.logger.pipe(l.pushPrefix(`[E:${v}]`));
+    router.endpoints.forEach((v, k) => {
+      v.logEmitter.pipe(l.pushPrefix(`[E:${k}]`));
     });
-    router.logger.pipe(l.pushPrefix('[Router]'));
+    router.logEmitter.pipe(l.pushPrefix('[Router]'));
     return router.started.catch(() => {
       throw new KnownError('Router was unable to start!');
     });
+  }).then(() => {
+    l.info(`Daemon was started successfully!`);
+    send(router.printTable(), 'success');
   });
 }

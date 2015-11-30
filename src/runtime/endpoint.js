@@ -3,6 +3,7 @@ import EventEmitter from 'events';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import dns from 'dns';
 import net from 'net';
 import KnownError from '../util/knownError.js';
 import { LogEmitter } from '../util/logger.js';
@@ -11,6 +12,7 @@ import aps from '../aps/aps.js';
 import util from '../util/util.js';
 
 Promise.promisifyAll(fs);
+Promise.promisifyAll(dns);
 
 const DEFAULT_SERVICE_CODE_SUFFIX = '.js';
 
@@ -19,7 +21,7 @@ export default class Endpoint extends EventEmitter {
     if (!util.isNonEmptyString(configPath))
       throw new TypeError('\'configPath\' argument must be a non-empty string');
     super();
-    const l = this.logger = new LogEmitter(),
+    const l = this.logEmitter = new LogEmitter(),
       configName = path.parse(configPath).name;
     this.configPath = configPath;
     l.info('Initializing...', true);
@@ -41,12 +43,12 @@ export default class Endpoint extends EventEmitter {
       for (let v of ['host', 'port', 'virtualHost', 'logLevel', 'dummy'])
         defaults[v] = this[v];
       defaults.name = defaults.home = configName;
-      const cv = new ConfigValidator(defaults, custom);
-      cv.logger.pipe(l);
-      const config = cv.validate({
+      const validator = new ConfigValidator(defaults, custom);
+      validator.logEmitter.pipe(l);
+      const config = validator.validate({
         'host': ['host identifier', v => (net.isIPv4(v) || util.isHostname(v)) ? v : undefined],
         'port': ['port number', v => util.isPort(v) ? v : undefined],
-        'virtualHost': ['virtual host', v => ((v === null) || util.isHostname(v)) ? v.toLowerCase() : undefined],
+        'virtualHost': ['virtual host', v => ((v === null) || (net.isIPv4(v) || util.isHostname(v))) ? v.toLowerCase() : undefined],
         'name': ['name', v => Endpoint.isName(v) ? v : undefined],
         'home': ['home directory', v => util.isNonEmptyString(v) ? (path.isAbsolute(v) ? v : path.resolve(Endpoint.relativeHomeRoot, v)) : undefined],
         'services': ['services definition', v => {
@@ -91,7 +93,7 @@ export default class Endpoint extends EventEmitter {
         }],
         'dummy': ['dummy mode', v => util.isBoolean(v) ? v : undefined]
       });
-      cv.logger.unpipe(l);
+      validator.logEmitter.unpipe(l);
       if(!Endpoint.isName(config.name))
         throw new KnownError(`No valid name could be selected. Candidates: ${'name' in custom ? '\'' + custom.name + '\', ' : ''}'${defaults.name}'`);
       if(!util.isNonEmptyString(config.home))
@@ -99,13 +101,20 @@ export default class Endpoint extends EventEmitter {
       if(!config.services)
         throw new KnownError(`Services definition could not be parsed`);
       Object.assign(this, config);
+      l.debug(`Running NS lookup for main host identifier: '${this.host}'...`);
+      return dns.lookupAsync(this.host, 4);
+    }, reason => {
+      throw new KnownError(`Failed to read main configuration file: ${reason.message}!`);
+    }).then(address => {
+      this.host = address;
       l.info(`Initialization finished successfully! Key: '${this.key}'.`);
       return this;
     }, reason => {
-      throw new KnownError(`Failed to read main configuration file: ${reason.message}!`);
+      throw new KnownError(`Unable to resolve main host identifier '${this.host}': ${reason.message}!`);
     });
     this.started = this.initialized.then(() => {
       l.info('Starting...');
+      l.info('Started successfully!');
     });
     this.started.catch(reason => {
       let message;
@@ -200,6 +209,10 @@ export default class Endpoint extends EventEmitter {
   }
 
   handleRequest(request) {
+
+  }
+
+  stop() {
 
   }
 }

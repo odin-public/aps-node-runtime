@@ -5,7 +5,7 @@ export default class ConfigValidator {
   constructor(defaults, overrides) {
     if (!util.isObject(defaults))
       throw new TypeError('\'defaults\' argument is expected to be an object');
-    this.logger = new LogEmitter();
+    this.logEmitter = new LogEmitter();
     this._config = defaults;
     if (util.isObject(overrides)) {
       this._config = Object.assign(Object.create(defaults), overrides);
@@ -16,7 +16,7 @@ export default class ConfigValidator {
   validate(validators) {
     if (!util.isObject(validators))
       throw new TypeError('\'validators\' argument is expected to be an object');
-    const l = this.logger,
+    const l = this.logEmitter,
       config = this._config,
       result = {};
     for (let key in validators) {

@@ -26,6 +26,8 @@ function exit(message, success = false) {
     .removeAllListeners('exit')
     .removeAllListeners('message')
     .removeAllListeners('error');
+  daemon.disconnect();
+  daemon.unref();
   log(result[success ? 'ok' : 'fail']);
   log(message);
   log(`More information may be available in '${logPath}'.`);
@@ -33,8 +35,8 @@ function exit(message, success = false) {
 
 log('Starting APS Node.js daemon... ', false);
 
-const daemon = child_process.fork('./daemon.js', {
-  silent: false
+const daemon = child_process.fork('daemon.js', {
+  stdio: 'ignore'
 });
 
 daemon
