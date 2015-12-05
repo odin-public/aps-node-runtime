@@ -103,8 +103,8 @@ function start() {
       l.error(`Failed to parse main configuration file contents: ${e.message}`);
       throw null;
     }
-    l.debug('Main configuration file was parsed successfully!');
-    l.trace(`Main configuration file representation:\n${util.stringify(parsed)}`);
+    l.debug('Main configuration file contents were parsed successfully!');
+    l.trace(`Main configuration file contents representation:\n${util.stringify(parsed)}`);
     return parsed;
   }, reason => {
     l.error(`Failed to read main configuration file: ${reason.message}!`);
@@ -149,6 +149,7 @@ function start() {
     } catch(e) {
       throw new KnownError(`Failed to validate main TLS private key file contents: ${e.message}!`);
     }
+    l.debug('Main TLS private key file contents were validated successfully!');
     return text;
   }, reason => {
     throw new KnownError(`Failed to read main TLS private key file: ${reason.message}!`);
@@ -163,6 +164,7 @@ function start() {
     } catch(e) {
       throw new KnownError(`Failed to validate main TLS certificate file contents: ${e.message}!`);
     }
+    l.debug('Main TLS certificate file contents were validated successfully!');
     return text;
   }, reason => {
     throw new KnownError(`Failed to read main TLS certificate file: ${reason.message}!`);

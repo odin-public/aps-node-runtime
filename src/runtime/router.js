@@ -133,15 +133,15 @@ export default class Router {
     if (endpoint.host === IPV4_ANY) {
       try {
         this.table.forEach((v, k) => {
-          if (v.has(endpoint.port))
+          if (v.has(endpoint.port) && k !== IPV4_ANY)
             throw k;
         });
       } catch(host) {
-        throw new Error(`Port ${endpoint.port} is already taken for '${host}', can't use it for IPv4_ANY ('${IPV4_ANY}')`);
+        throw new Error(`Port ${endpoint.port} is already taken for '${host}', can't use it for IPv4_ANY ('${IPV4_ANY}')`); // TODO: Check what to do here: we may simply say it's ok to bind to 'ALL' when we have at least one IP on that port, will simply serve from there
       }
     } else {
       if ((item = this.table.get(IPV4_ANY)) && (item.get(endpoint.port)))
-        throw new Error(`Port ${endpoint.port} is already taken for IPv4_ANY ('${IPV4_ANY}')`);
+        throw new Error(`Port ${endpoint.port} is already taken for IPv4_ANY ('${IPV4_ANY}')`); // TODO: Check: maybe we can also 'OK' this, but it won't be right if our '0.0.0.0' does not include the rquested IP
     }
     item = this.table;
     for (let v of ['host', 'port', 'virtualHost']) {
@@ -159,14 +159,6 @@ export default class Router {
     } else {
       throw new Error(`Endpoint with that key already exists in the table: '${endpoint.key}'`);
     }
-  }
-
-  _detachEndpoint(id) {
-
-  }
-
-  removeEndpoint(id) {
-
   }
 
   _cleanupTable() {
@@ -233,6 +225,7 @@ export default class Router {
       }
     });
     l.debug(`Routing table cleanup finished. Dropped ${util.pluralize('endpoint', droppedEndpoints.length, true)} and ${util.pluralize('listener', droppedListeners, true)}!`);
+    return droppedEndpoints;
   }
 
   _requestHandler(root, request, response) {
