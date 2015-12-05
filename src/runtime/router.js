@@ -98,10 +98,12 @@ export default class Router {
       return Promise.join(Promise.all(listenerSates), Promise.all(endpointStates));
     }).spread((listenerStates, endpointStates) => {
       if (!listenerStates.some(v => v.isFulfilled()))
-        throw new KnownError('No listeners could start!');
+        throw new KnownError('No listeners could start');
       if (!endpointStates.some(v => v.isFulfilled()))
-        throw new KnownError('No endpoints could start!');
+        throw new KnownError('No endpoints could start');
       const dropped = this._cleanupTable();
+      if (this.endpoints.size === 0)
+        throw new KnownError('No endpoint-listener pairs left after cleanup');
       l.info(`Current routing table:\n${this.printTable()}`);
       return dropped;
     });
@@ -170,7 +172,8 @@ export default class Router {
   _cleanupTable() {
     const l = this.logEmitter,
       hosts = this.table,
-      endpoints = this.endpoints;
+      endpoints = this.endpoints,
+      listeners = this.listeners;
     let droppedEndpoints = [],
       droppedListeners = 0;
     l.debug('Releasing stale resources and cleaning up routing table...');
@@ -220,7 +223,7 @@ export default class Router {
           l.debug(`Removing port: '${port}' from table, reason: no virtual hosts left! Dropping associated listener: '${listenerKey}'!`);
           ports.delete(port);
           listeners.get(listenerKey).close();
-          listeners.remove(listenerKey);
+          listeners.delete(listenerKey);
           droppedListeners++;
         }
       });
