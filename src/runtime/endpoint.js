@@ -6,15 +6,18 @@ import fs from 'fs';
 import dns from 'dns';
 import net from 'net';
 import KnownError from '../util/knownError.js';
-import { LogEmitter } from '../util/logger.js';
+import { Logger, LogEmitter } from '../util/logger.js';
 import ConfigValidator from '../util/configValidator.js';
 import aps from '../aps/aps.js';
 import util from '../util/util.js';
+//import Instance from './instance.js';
 
 Promise.promisifyAll(fs);
 Promise.promisifyAll(dns);
 
-const DEFAULT_SERVICE_CODE_SUFFIX = '.js';
+const META_DIR_NAME = 'aps',
+  LOG_NAME = 'endpoint.log',
+  DEFAULT_SERVICE_CODE_SUFFIX = '.js';
 
 export default class Endpoint extends EventEmitter {
   constructor(configPath) {
@@ -51,7 +54,7 @@ export default class Endpoint extends EventEmitter {
         'virtualHost': ['virtual host', v => ((v === null) || (net.isIPv4(v) || util.isHostname(v))) ? v.toLowerCase() : undefined],
         'name': ['name', v => Endpoint.isName(v) ? v : undefined],
         'home': ['home directory', v => util.isNonEmptyString(v) ? (path.isAbsolute(v) ? v : path.resolve(Endpoint.relativeHomeRoot, v)) : undefined],
-        'services': ['services definition', v => {
+        'services': ['services definition', v => { //TODO: no newline before object here, need to invent something
           let normalized = {};
           if (Array.isArray(v)) {
             if (!v.every(v1 => {
@@ -101,20 +104,20 @@ export default class Endpoint extends EventEmitter {
       if(!config.services)
         throw new KnownError(`Services definition could not be parsed`);
       Object.assign(this, config);
-      l.debug(`Running NS lookup for main host identifier: '${this.host}'...`);
-      return dns.lookupAsync(this.host, 4);
-    }, reason => {
-      throw new KnownError(`Failed to read main configuration file: ${reason.message}!`);
-    }).then(address => {
-      this.host = address;
       l.info(`Initialization finished successfully! Key: '${this.key}'.`);
       return this;
     }, reason => {
-      throw new KnownError(`Unable to resolve main host identifier '${this.host}': ${reason.message}!`);
+      throw new KnownError('Failed to read configuration file');
     });
-    this.started = this.initialized.then(() => {
-      l.info('Starting...');
-      l.info('Started successfully!');
+    const startTrigger = new Promise(resolve => {
+      this.start = function start() {
+        resolve();
+        return this.started;
+      };
+    });
+    this.started = this.initialized.then(() => startTrigger).then(() => {
+      this.logEmitter.error('STARTING');
+      if (this.host === '127.0.0.2') throw new Error('asdasd');
     });
     this.started.catch(reason => {
       let message;
@@ -213,7 +216,8 @@ export default class Endpoint extends EventEmitter {
   }
 
   stop() {
-
+    this.started.finally(() => {
+    });
   }
 }
 

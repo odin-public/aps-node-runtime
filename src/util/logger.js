@@ -98,7 +98,7 @@ export class Logger {
       return false;
     let count = 0;
     while (this._pending.length) {
-      this._write.apply(this, this._pending.shift());
+      this._write(...this._pending.shift());
       count++;
     }
     return count;
@@ -131,7 +131,7 @@ export class Logger {
 
   isReady() {
     if (!this.ready.isPending())
-      return this._stream._writableState.ending ? false : this.ready.isFulfilled();
+      return (this._stream && this._stream._writableState.ending) ? false : this.ready.isFulfilled();
   }
 
   isActive() {
@@ -169,7 +169,7 @@ export class LogEmitter extends EventEmitter {
     };
   }
 
-  pipe(receiver) {
+  pipe(receiver) { // TODO: add a functionality that can transform flowing logs
     if (!((receiver instanceof Logger) || (receiver instanceof LoggerProxy) || (receiver instanceof LogEmitter)))
       throw new TypeError('\'receiver\' is expected to be either \'Logger\', \'LoggerProxy\' or \'LogEmitter\'');
     this._receivers.add(receiver);

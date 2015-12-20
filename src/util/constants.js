@@ -3,7 +3,7 @@ export default {
   CONFIG_DIR: '/etc/aps/node',
   ENDPOINT_DIR: '/var/aps-node',
   LOG_DIR: '/var/log',
-  USER: 'aps-node',
+  IDENTITY: 'aps-node',
   MAIN_CONFIG: {
     logLevel: 'TRACE',
     defaultHost: '0.0.0.0',

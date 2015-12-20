@@ -27,10 +27,10 @@ const extensions = {
     string = String(string);
     return string.charAt(0).toUpperCase() + string.substring(1);
   },
-  pluralize(word, count = 2, includeCount = false) {
+  pluralize(word, count = 2, excludeCount = false) {
     word = String(word);
     const last = word.slice(-1);
-    if (includeCount)
+    if (!excludeCount)
       word = count + ' ' + word;
     if (count === 1) {
       if ((last === 's') || (last === 'S'))

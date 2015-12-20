@@ -1,6 +1,9 @@
 import Promise from 'bluebird';
+import EventEmitter from 'events';
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
+import dns from 'dns';
 import tls from 'tls';
 import https from 'https';
 import Endpoint from '../runtime/endpoint.js';
@@ -9,11 +12,15 @@ import { LogEmitter } from '../util/logger.js';
 import KnownError from '../util/knownError.js';
 import util from '../util/util.js';
 
-const IPV4_ANY = '0.0.0.0',
-  ENDPOINT_ID_UPPER_BOUND = Math.pow(2, 12);
+Promise.promisifyAll(dns);
+Promise.promisifyAll(https);
 
-export default class Router {
+const IPV4_ANY = '0.0.0.0',
+  ENDPOINT_ID_MAX = Math.pow(2, 12);
+
+export default class Router extends EventEmitter {
   constructor(tlsKey, tlsCert, endpoints) {
+    super();
     if (util.isNonEmptyString(tlsKey))
       throw new TypeError('\'tlsKey\' argument must be a non-empty string');
     if (util.isNonEmptyString(tlsCert))
@@ -28,83 +35,102 @@ export default class Router {
     } catch(e) {
       throw new Error(`Failed to use the provieded TLS credentials: ${e.message}`);
     }
+    this.tlsKey = tlsKey;
+    this.tlsCert = tlsCert;
     const l = this.logEmitter = new LogEmitter();
     l.info('Initializing...', true);
     l.info('Waiting for endpoints to finish initialization...', true);
     this.table = new Map();
     this.endpoints = new Map();
     this.listeners = new Map();
-    this._pendingRequests = new Set();
+    this.objectKeys = new Map();
     const dropped = [];
-    l.info('Initializing...');
-    this.initialized = Promise.all(endpoints.map(v => {
-      const k = util.createUuid(ENDPOINT_ID_UPPER_BOUND);
-      this.endpoints.set(k, v);
-      v.initialized.then(() => {
-        try {
-          l.debug(`Endpoint with ID: '${k}' has initialized. Attaching...`);
-          this._attachEndpoint(k);
-        } catch(e) {
-          l.error(`Dropping initialized endpoint with ID: '${k}', reason: failed to attach (${e.message})`);
-          dropped.push(v);
-          v.stop();
-          this.endpoints.delete(k);
+    let listenersState;
+    this.initialized = Promise.all(endpoints.map(endpoint => {
+      const id = util.createUuid(ENDPOINT_ID_MAX);
+      this.endpoints.set(id, endpoint);
+      this.objectKeys.set(endpoint, id);
+      const state = endpoint.initialized.then(() => {
+        const host = endpoint.host;
+        if (net.isIP(host)) {
+          l.debug(`Endpoint host identifier is already an IP address: '${host}'. No NS lookup needed!`);
+          return;
         }
+        l.debug(`Running NS lookup for endpoint host identifier: '${host}'...`);
+        return dns.lookupAsync(host, 4).then(address => {
+          l.info(`NS lookup result for '${host}' is: '${address}'!`);
+          endpoint.host = address;
+        }, reason => {
+          throw new KnownError(`Unable to resolve main host identifier '${host}': ${reason.message}`);
+        });
       }, () => {
-        l.error(`Dropping endpoint with ID: '${k}', reason: failed to initialize.`);
-        dropped.push(v);
-        this.endpoints.delete(k);
+        throw new KnownError('Failed to initialize');
+      }).then(() => {
+        try {
+          l.info(`Endpoint with ID: '${id}' has initialized. Attaching...`);
+          const newListener = this._attachEndpoint(id),
+            listenerKey = `'${endpoint.host}:${endpoint.port}'`;
+          l.debug(`Endpoint with ID: '${id}' was attached successfully!`);
+          if (newListener !== undefined) {
+            l.info(`Attempting to bind to: ${listenerKey}...`);
+            newListener.listening.then(() => {
+              l.debug(`Successfully started listening on: ${listenerKey}!`);
+            }, reason => {
+              l.error(`Failed to bind to: ${listenerKey}: ${reason.message}`);
+            })
+          }
+        } catch(e) {
+          throw new KnownError(`Failed to attach: ${e.message}`);
+        }
       });
-      return v.initialized.reflect();
+      state.catch(reason => {
+        let message;
+        if (reason instanceof KnownError)
+          message = reason.message;
+        else if (reason instanceof Error)
+          message = reason.stack;
+        else
+          message = util.stringify(reason);
+        l.error(`Dropping endpoint with ID: '${id}': ${message}`);
+        this.endpoints.delete(id);
+        this.objectKeys.delete(endpoint);
+        dropped.push(endpoint);
+      });
+      return state.reflect();
     })).then(states => {
       if (!states.some(v => v.isFulfilled()))
         throw new KnownError('No endpoints could initialize!');
+      const listenerStates = [];
+      this.listeners.forEach(v => listenerStates.push(v.listening.reflect()));
+      listenersState = Promise.all(listenerStates).then(() => {
+        if (!listenerStates.some(v => v.isFulfilled()))
+          throw new KnownError('No listeners could start!');
+        this.emit('listening', this.listeners);
+      });
       l.info(`Current routing table:\n${this.printTable()}`);
       return dropped;
     });
-    this.started = this.initialized.then(() => {
+    this.started = this.initialized.then(() => listenersState).then(() => {
       l.info('Starting...');
-      l.debug('Creating HTTPS listeners...');
-      const hosts = this.table,
-        listenerSates = [],
-        endpointStates = [];
-      hosts.forEach((ports, host) => {
-        ports.forEach((virtualHosts, port) => {
-          const listenerKey = `${host}:${port}`;
-          l.debug(`Adding listener for '${listenerKey}'...`);
-          const listener = https.createServer({
-            key: tlsKey,
-            cert: tlsCert
+      l.info('Starting endpoints for successful listeners...');
+      const startingStates = [];
+      this.table.forEach((endpoints, listener) => {
+        if (listener.listening.isFulfilled()) {
+          const listenerKey = this.objectKeys.get(listener);
+          endpoints.forEach(endpoint => {
+            l.debug(`Starting the endpoint with ID: '${this.objectKeys.get(endpoint)}' (key: '${endpoint.key}') for listener: '${listenerKey}'`);
+            endpoint.start();
+            startingStates.push(endpoint.started.reflect());
           });
-          listenerSates.push((new Promise((resolve, reject) => {
-            listener.once('error', err => {
-              listener.removeAllListeners('listening');
-              l.error(`Failed to bind to '${listenerKey}': ${err.message}!`);
-              reject(err);
-            }).once('listening', () => {
-              listener.removeAllListeners('error');
-              l.info(`Successfully started listening on '${listenerKey}'!`);
-              resolve();
-            }).listen(port, host);
-          })).reflect());
-          this.listeners.set(listenerKey, listener);
-          virtualHosts.forEach((names, virtualHost) => {
-            names.forEach((id, name) => {
-              endpointStates.push(this.endpoints.get(id).started.reflect());
-            });
-          });
-        })
+        }
       });
-      return Promise.join(Promise.all(listenerSates), Promise.all(endpointStates));
-    }).spread((listenerStates, endpointStates) => {
-      if (!listenerStates.some(v => v.isFulfilled()))
-        throw new KnownError('No listeners could start');
-      if (!endpointStates.some(v => v.isFulfilled()))
-        throw new KnownError('No endpoints could start');
-      const dropped = this._cleanupTable();
-      if (this.endpoints.size === 0)
-        throw new KnownError('No endpoint-listener pairs left after cleanup');
-      l.info(`Current routing table:\n${this.printTable()}`);
+      return Promise.all(startingStates);
+    }).then(states => {
+      if (!states.some(v => v.isFulfilled()))
+        throw new KnownError('No endpoints could start!');
+      l.info(`Endpoints have started!`);
+      dropped.push(...this._cleanupTable());
+      l.info(`Started successfully! Dropped ${util.pluralize('endpoint', dropped.length)} in total.`);
       return dropped;
     });
     this.started.catch(reason => {
@@ -119,112 +145,108 @@ export default class Router {
     });
   }
 
-  addEndpoint(endpoint) {
-
-  }
-
   _attachEndpoint(id) {
     const endpoint = this.endpoints.get(id);
-    if (endpoint === undefined) {
-      throw new Error(`No endpoint with ID: '${id}' found`);
-    }
-    let item,
-      container;
-    if (endpoint.host === IPV4_ANY) {
-      try {
-        this.table.forEach((v, k) => {
-          if (v.has(endpoint.port) && k !== IPV4_ANY)
-            throw k;
-        });
-      } catch(host) {
-        throw new Error(`Port ${endpoint.port} is already taken for '${host}', can't use it for IPv4_ANY ('${IPV4_ANY}')`); // TODO: Check what to do here: we may simply say it's ok to bind to 'ALL' when we have at least one IP on that port, will simply serve from there
+    if (endpoint  === undefined)
+      throw new KnownError(`Endpoint with ID: '${id}' not found`);
+    this.listeners.forEach((v, k) => {
+      let [host, port] = k.split(':');
+      port = parseInt(port, 10);
+      if (endpoint.host === IPV4_ANY) {
+        if ((host !== IPV4_ANY) && (port === endpoint.port))
+          throw new KnownError(`Port ${port} is already taken for '${host}', can't use it for IPv4_ANY ('${IPV4_ANY}')`);
+      } else {
+        if ((host === IPV4_ANY) && (port === endpoint.port))
+          throw new KnownError(`Port ${port} is already taken for IPv4_ANY ('${IPV4_ANY}'), can't use it for '${host}'`);
       }
+    });
+    const objectKeys = this.objectKeys,
+      table = this.table,
+      listeners = this.listeners,
+      options = {
+        key: this.tlsKey,
+        cert: this.tlsCert
+      },
+      {host, port} = endpoint,
+      listenerKey = `${host}:${port}`;
+    let listener = listeners.get(listenerKey);
+    if (listener === undefined) {
+      listener = https.createServer(options); //TODO: stuff some function in here
+      listener.listening = new Promise((resolve, reject) => {
+        listener.on('error', err => {
+          listener.removeAllListeners('error').removeAllListeners('listening');
+          reject(err);
+        }).on('listening', () => {
+          listener.removeAllListeners('error').removeAllListeners('listening');
+          resolve(listener);
+        }).listen(port, host);
+      });
+      const endpoints = new Set();
+      table.set(listener, endpoints);
+      listeners.set(listenerKey, listener);
+      objectKeys.set(listener, listenerKey);
+      endpoints.add(endpoint);
+      return listener;
     } else {
-      if ((item = this.table.get(IPV4_ANY)) && (item.get(endpoint.port)))
-        throw new Error(`Port ${endpoint.port} is already taken for IPv4_ANY ('${IPV4_ANY}')`); // TODO: Check: maybe we can also 'OK' this, but it won't be right if our '0.0.0.0' does not include the rquested IP
-    }
-    item = this.table;
-    for (let v of ['host', 'port', 'virtualHost']) {
-      container = item;
-      item = container.get(endpoint[v]);
-      if (item === undefined) {
-        item = new Map();
-        container.set(endpoint[v], item);
-      }
-    }
-    container = item;
-    item = container.get(endpoint.name);
-    if (item === undefined) {
-      container.set(endpoint.name, id);
-    } else {
-      throw new Error(`Endpoint with that key already exists in the table: '${endpoint.key}'`);
+      const endpoints = table.get(listener);
+      endpoints.forEach(v => {
+        if ((v.virtualHost === endpoint.virtualHost) && (v.name === endpoint.name))
+          throw new KnownError(`Endpoint with that key already exists in the table: '${endpoint.key}'`);
+      });
+      endpoints.add(endpoint);
     }
   }
 
   _cleanupTable() {
-    const l = this.logEmitter,
-      hosts = this.table,
+    const l = this.logEmitter;
+    l.info('Starting routing table cleanup...');
+    const table = this.table,
+      listeners = this.listeners,
       endpoints = this.endpoints,
-      listeners = this.listeners;
-    let droppedEndpoints = [],
-      droppedListeners = 0;
-    l.debug('Releasing stale resources and cleaning up routing table...');
-    this.listeners.forEach((v, k) => {
-      if (!v._handle) {
-        l.debug(`Dropping a failed listener for '${k}' and all associated endpoints...`);
-        let [host, port] = k.split(':');
-        port = parseInt(port);
-        const ports = hosts.get(host);
-        ports.get(port).forEach((names, virtualHost) => {
-          names.forEach((id, name) => {
-            l.debug(`Dropping endpoint with ID: '${id}', reason: listener failed to start!`);
-            const endpoint = endpoints.get(id);
-            endpoint.stop();
-            endpoints.delete(id);
-            droppedEndpoints.push(endpoint);
-          });
-        });
-        ports.delete(port);
-        if (ports.size === 0) {
-          l.debug(`Removing host: '${host}' from table, reason: no ports left!`);
-          hosts.delete(host);
-        }
+      objectKeys = this.objectKeys,
+      droppedEndpoints = [];
+    let droppedListeners = 0;
+    table.forEach((endpointsForListener, listener) => {
+      if (listener.listening.isRejected()) {
+        const key = objectKeys.get(listener);
+        l.debug(`Removing listener with key: '${key}': failed to start!`);
         droppedListeners++;
+        listeners.delete(key);
+        objectKeys.delete(listener);
+        table.delete(listener);
+        endpointsForListener.forEach(endpoint => {
+          const key = objectKeys.get(endpoint);
+          l.debug(`Dropping endpoint with ID: '${key}': associated listener failed to start!`);
+          endpoint.stop();
+          droppedEndpoints.push(endpoint);
+          endpoints.delete(key);
+          objectKeys.delete(endpoint);
+        });
       }
     });
-    hosts.forEach((ports, host) => {
-      ports.forEach((virtualHosts, port) => {
-        const listenerKey = `${host}:${port}`;
-        virtualHosts.forEach((names, virtualHost) => {
-          names.forEach((id, name) => {
-            const endpoint = endpoints.get(id);
-            if (endpoint.started.isRejected()) {
-              l.debug(`Dropping endpoint with ID: '${id}', reason: failed to start!`);
-              endpoint.stop();
-              endpoints.delete(id);
-              names.delete(name);
-              droppedEndpoints.push(endpoint);
-            }
-          });
-          if (names.size === 0) {
-            l.debug(`Removing virtual host: '${virtualHost}' from table, reason: no names left!`);
-            virtualHosts.delete(virtualHost);
-          }
-        });
-        if (virtualHosts.size === 0) {
-          l.debug(`Removing port: '${port}' from table, reason: no virtual hosts left! Dropping associated listener: '${listenerKey}'!`);
-          ports.delete(port);
-          listeners.get(listenerKey).close();
-          listeners.delete(listenerKey);
-          droppedListeners++;
+    table.forEach((endpointsForListener, listener) => {
+      const key = objectKeys.get(listener);
+      endpointsForListener.forEach(endpoint => {
+        if (endpoint.started.isRejected()) {
+          const key = objectKeys.get(endpoint);
+          l.debug(`Dropping endpoint with ID: '${key}': failed to start!`);
+          endpoint.stop();
+          droppedEndpoints.push(endpoint);
+          endpointsForListener.delete(endpoint);
+          endpoints.delete(key);
+          objectKeys.delete(endpoint);
         }
       });
-      if (ports.size === 0) {
-        l.debug(`Removing host: '${host}' from table, reason: no ports left!`);
-        hosts.delete(host);
+      if (endpointsForListener.size === 0) {
+        l.debug(`Removing listener with key: '${key}': no associated endpoints could start!`);
+        listener.close();
+        droppedListeners++;
+        listeners.delete(key);
+        objectKeys.delete(listener);
+        table.delete(listener);
       }
     });
-    l.debug(`Routing table cleanup finished. Dropped ${util.pluralize('endpoint', droppedEndpoints.length, true)} and ${util.pluralize('listener', droppedListeners, true)}!`);
+    l.info(`Routing table cleanup finished. Removed ${util.pluralize('endpoint', droppedEndpoints.length)} and ${util.pluralize('listener', droppedListeners)}!`);
     return droppedEndpoints;
   }
 
@@ -234,30 +256,46 @@ export default class Router {
     console.log(request, response);
   }
 
-  printTable(includeStatus = false) {
-    const trees = [];
-    this.table.forEach((v, k) => {
-      const item = {
-        label: k,
-        nodes: []
-      };
-      trees.push(item);
-      v.forEach((v1, k1) => {
-        const item1 = {
-          label: `:${k1}`,
+  printTable() {
+    const trees = [],
+      endpoints = this.endpoints;
+    let root;
+    this.listeners.forEach((listener, listenerKey) => {
+      const [host, port] = listenerKey.split(':');
+      root = trees;
+      let hostNode = root.find(v => v.label === host);
+      if (hostNode === undefined) {
+        hostNode = {
+          label: host,
           nodes: []
         };
-        item.nodes.push(item1);
-        v1.forEach((v2, k2) => {
-          const item2 = {
-            label: `(${k2 === null ? '*' : k2})`,
+        root.push(hostNode);
+      }
+      root = hostNode.nodes;
+      let portNode = root.find(v => v.label === port);
+      if (portNode === undefined) {
+        portNode = {
+          label: port,
+          nodes: []
+        };
+        root.push(portNode);
+      }
+      this.table.get(listener).forEach(endpoint => {
+        const {virtualHost, name} = endpoint,
+        id = this.objectKeys.get(endpoint);
+        root = portNode.nodes;
+        let virtualHostNode = root.find(v => v.label === virtualHost);
+        if (virtualHostNode === undefined) {
+          virtualHostNode = {
+            label: `(${virtualHost === null ? '*' : virtualHost})`,
             nodes: []
           };
-          item1.nodes.push(item2);
-          v2.forEach((v3, k3) => {
-            item2.nodes.push(`/${k3} - '${v3}'`);
-          });
-        });
+          root.push(virtualHostNode);
+        }
+        root = virtualHostNode.nodes;
+        let nameNode = root.find(v => v.label === name);
+        if (nameNode === undefined)
+          root.push(`/${name} - '${id}'`);
       });
     });
     return trees.map(v => util.pipeTree(v)).join('').slice(0, -1);

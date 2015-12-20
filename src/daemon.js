@@ -43,7 +43,7 @@ function exit(code) {
   l.close().then(() => process.exit(code));
 }
 
-process
+process // TODO: make this use log when its available
   .on('uncaughtException', error => {
     send(error.stack);
     exit(EXIT_GENERAL_FAILURE);
@@ -61,8 +61,8 @@ process.send({
 l.pause();
 
 l.ready
-  .then(start, reason => {
-    send(`Unable to open main log: ${reason}`);
+  .then(start, err => {
+    send(`Unable to open main log: ${err.message}`);
     throw EXIT_GENERAL_FAILURE;
   })
   .catch(reason => {
@@ -195,8 +195,19 @@ function start() {
     router.endpoints.forEach((v, k) => {
       v.logEmitter.pipe(l.pushPrefix(`[E:${k}]`));
     });
+    if ('setuid' in process) {
+      router.on('listening', () => {
+        const id = c.IDENTITY;
+        l.info(`Router is now listening. Switching privileges to: '${id}'...`);
+        process.setgid(id);
+        process.setegid(id);
+        process.setuid(id);
+        process.seteuid(id);
+        l.info(`Set original and effective user ID and group ID to: '${id}'!`);
+      });
+    }
     router.logEmitter.pipe(l.pushPrefix('[Router]'));
-    return router.started.catch(() => {
+    return router.started.catch(reason => {
       throw new KnownError('Router was unable to start!');
     });
   }).then(() => {
