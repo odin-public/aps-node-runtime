@@ -19,10 +19,10 @@ const levels = [
   openMark = '======= Log was opened =======';
 
 export class Logger {
-  constructor(path, mode, writeOpenMark = true) { // TODO: fd-based and stream-based constructors
+  constructor(path, mode = 0o644, writeOpenMark = true) { // TODO: fd-based and stream-based constructors
     if ((typeof path !== 'string') || !path)
       throw new TypeError('\'path\' argument must be a non-empty string');
-    if (!Number.isSafeInteger(mode)) { //'shift' args
+    if (util.isBoolean(mode) && (writeOpenMark === undefined)) {
       writeOpenMark = mode;
       mode = 0o644;
     }
@@ -36,9 +36,11 @@ export class Logger {
       });
       this._writePending();
       return this;
+    }, reason => {
+      throw new Error(`Failed to open file: ${reason.message}`);
     });
     if (writeOpenMark)
-      this._log(LEVEL_NOLEVEL, openMark);
+      this._log(LEVEL_NOLEVEL, undefined, openMark);
   }
 
   static isLevel(level) {
@@ -46,7 +48,7 @@ export class Logger {
   }
 
   static isLevelName(levelName) {
-    return !(levels.indexOf(levelName) === -1);
+    return levels.indexOf(levelName) !== -1;
   }
 
   static set defaultDateFormat(dateFormat) {
@@ -200,10 +202,10 @@ export class LogEmitter extends EventEmitter {
 LogEmitter.isLevel = Logger.isLevel;
 LogEmitter.isLevelName = Logger.isLevelName;
 
-class LoggerProxy {
+export class LoggerProxy {
   constructor(logger, prefix) {
-    if (!((logger instanceof Logger) || (logger instanceof LoggerProxy) || (logger instanceof LogEmitter)))
-      throw new TypeError('\'logger\' is expected to be either \'Logger\', \'LoggerProxy\' or \'LogEmitter\', please use \'pushPrefix\' method instead of manual instantiation');
+    if (!((logger instanceof Logger) || (logger instanceof LogEmitter) || (logger instanceof LoggerProxy)))
+      throw new TypeError('\'logger\' is expected to be either \'Logger\', \'LogEmitter\' or \'LoggerProxy\', please use \'pushPrefix\' method instead of manual instantiation');
     this._logger = logger;
     this._prefix = prefix;
   }

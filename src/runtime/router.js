@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import net from 'net';
 import dns from 'dns';
+import crypto from 'crypto';
 import tls from 'tls';
 import https from 'https';
 import Endpoint from '../runtime/endpoint.js';
@@ -16,7 +17,7 @@ Promise.promisifyAll(dns);
 Promise.promisifyAll(https);
 
 const IPV4_ANY = '0.0.0.0',
-  ENDPOINT_ID_MAX = Math.pow(2, 12);
+  ENDPOINT_ID_CHARS = 3;
 
 export default class Router extends EventEmitter {
   constructor(tlsKey, tlsCert, endpoints) {
@@ -37,17 +38,16 @@ export default class Router extends EventEmitter {
     }
     this.tlsKey = tlsKey;
     this.tlsCert = tlsCert;
-    const l = this.logEmitter = new LogEmitter();
-    l.info('Initializing...', true);
-    l.info('Waiting for endpoints to finish initialization...', true);
+    const l = this.logEmitter = new LogEmitter(),
+      dropped = [];
     this.table = new Map();
     this.endpoints = new Map();
     this.listeners = new Map();
     this.objectKeys = new Map();
-    const dropped = [];
-    let listenersState;
+    l.info('Initializing...', true);
+    l.info('Waiting for endpoints to finish initialization...', true);
     this.initialized = Promise.all(endpoints.map(endpoint => {
-      const id = util.createUuid(ENDPOINT_ID_MAX);
+      const id = crypto.randomBytes(Math.ceil(ENDPOINT_ID_CHARS / 2)).toString('hex').slice(ENDPOINT_ID_CHARS % 2);
       this.endpoints.set(id, endpoint);
       this.objectKeys.set(endpoint, id);
       const state = endpoint.initialized.then(() => {
@@ -84,14 +84,7 @@ export default class Router extends EventEmitter {
         }
       });
       state.catch(reason => {
-        let message;
-        if (reason instanceof KnownError)
-          message = reason.message;
-        else if (reason instanceof Error)
-          message = reason.stack;
-        else
-          message = util.stringify(reason);
-        l.error(`Dropping endpoint with ID: '${id}': ${message}`);
+        l.error(`Dropping endpoint with ID: '${id}': ${KnownError.stringify(reason)}`);
         this.endpoints.delete(id);
         this.objectKeys.delete(endpoint);
         dropped.push(endpoint);
@@ -99,18 +92,19 @@ export default class Router extends EventEmitter {
       return state.reflect();
     })).then(states => {
       if (!states.some(v => v.isFulfilled()))
-        throw new KnownError('No endpoints could initialize!');
-      const listenerStates = [];
-      this.listeners.forEach(v => listenerStates.push(v.listening.reflect()));
-      listenersState = Promise.all(listenerStates).then(() => {
-        if (!listenerStates.some(v => v.isFulfilled()))
-          throw new KnownError('No listeners could start!');
-        this.emit('listening', this.listeners);
-      });
-      l.info(`Current routing table:\n${this.printTable()}`);
+        throw new KnownError('No endpoints could initialize');
+      l.info(`Initialized! Dropped ${util.pluralize('endpoint', dropped.length)}. Current routing table:\n${this.printTable()}`);
       return dropped;
     });
-    this.started = this.initialized.then(() => listenersState).then(() => {
+    this.started = this.initialized.then(() => {
+      const listenerStates = [];
+      this.listeners.forEach(v => listenerStates.push(v.listening.reflect()));
+      return Promise.all(listenerStates).then(() => {
+        if (!listenerStates.some(v => v.isFulfilled()))
+          throw new KnownError('No listeners could start');
+        this.emit('listening', this.listeners);
+      });
+    }).then(() => {
       l.info('Starting...');
       l.info('Starting endpoints for successful listeners...');
       const startingStates = [];
@@ -127,25 +121,18 @@ export default class Router extends EventEmitter {
       return Promise.all(startingStates);
     }).then(states => {
       if (!states.some(v => v.isFulfilled()))
-        throw new KnownError('No endpoints could start!');
+        throw new KnownError('No endpoints could start');
       l.info(`Endpoints have started!`);
       dropped.push(...this._cleanupTable());
-      l.info(`Started successfully! Dropped ${util.pluralize('endpoint', dropped.length)} in total.`);
+      l.info(`Started! Dropped ${util.pluralize('endpoint', dropped.length)} in total. Current routing table:\n${this.printTable()}`);
       return dropped;
     });
     this.started.catch(reason => {
-      let message;
-      if (reason instanceof KnownError)
-        message = reason.message;
-      else if (reason instanceof Error)
-        message = reason.stack;
-      else
-        message = util.stringify(reason);
-      l.error(`Failed to ${this.initialized.isFulfilled() ? 'start' : 'initialize'}: ${message}`);
+      l.error(`Failed to ${this.initialized.isFulfilled() ? 'start' : 'initialize'}: ${KnownError.stringify(reason)}!`);
     });
   }
 
-  _attachEndpoint(id) {
+  _attachEndpoint(id) { // TODO: probably better to add error for identical home dirs
     const endpoint = this.endpoints.get(id);
     if (endpoint  === undefined)
       throw new KnownError(`Endpoint with ID: '${id}' not found`);

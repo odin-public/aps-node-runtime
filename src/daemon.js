@@ -67,7 +67,7 @@ l.ready
   })
   .catch(reason => {
     let message;
-    if (reason instanceof KnownError) {
+    if (reason instanceof KnownError) { //TODO: KnownError.stringify
       send(reason.message);
       message = reason.message;
     } else if (reason instanceof Error) {
@@ -193,7 +193,11 @@ function start() {
     l.info(`Creating and passing control to the router with these endpoints: '${endpoints.join('\', \'')}'`);
     router = new Router(tlsKey, tlsCert, endpoints.map(v => new Endpoint(path.resolve(endpointsPath, v))));
     router.endpoints.forEach((v, k) => {
-      v.logEmitter.pipe(l.pushPrefix(`[E:${k}]`));
+      const endpointPrefix = l.pushPrefix(`[E:${k}]`);
+      v.logEmitter.pipe(endpointPrefix);
+      v.started.catch(() => {
+        v.logEmitter.unpipe(endpointPrefix);
+      });
     });
     if ('setuid' in process) {
       router.on('listening', () => {
@@ -208,7 +212,7 @@ function start() {
     }
     router.logEmitter.pipe(l.pushPrefix('[Router]'));
     return router.started.catch(reason => {
-      throw new KnownError('Router was unable to start!');
+      throw new KnownError(`Router was unable to start: ${KnownError.stringify(reason)}!`);
     });
   }).then(() => {
     l.info(`Daemon was started successfully!`);

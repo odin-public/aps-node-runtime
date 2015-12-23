@@ -1,5 +1,7 @@
 import util from './util.js';
-import { LogEmitter } from './logger.js';
+import { Logger, LogEmitter, LoggerProxy } from './logger.js';
+
+const newLine = '\n';
 
 export default class ConfigValidator {
   constructor(defaults, overrides) {
@@ -52,8 +54,25 @@ export default class ConfigValidator {
         reason = 'no custom config';
       }
       result[key] = value;
-      l[level](`${message} ${util.stringify(value)} (${reason})!`);
+      value = util.stringify(value);
+      if (value.indexOf(newLine) !== -1)
+        value = newLine + value;
+      l[level](`${message} ${value} (${reason})`);
     }
     return result;
+  }
+
+  static logConfig(logger, validators, config) {
+    if (!((logger instanceof Logger) || (logger instanceof LogEmitter) || (logger instanceof LoggerProxy)))
+      throw new TypeError('\'logger\' is expected to be either \'Logger\', \'LogEmitter\' or \'LoggerProxy\'');
+    for (let key in validators) {
+      let value = validators[key],
+        name = value[0];
+      value = config[key];
+      value = util.stringify(value);
+      if (value.indexOf(newLine) !== -1)
+        value = newLine + value;
+      logger.info(`${util.capitalize(name)} set to: ${value}`);
+    }
   }
 }
