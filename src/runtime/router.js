@@ -13,6 +13,8 @@ import { LogEmitter } from '../util/logger.js';
 import KnownError from '../util/knownError.js';
 import util from '../util/util.js';
 
+import Incoming from './incoming.js';
+
 Promise.promisifyAll(dns);
 Promise.promisifyAll(https);
 
@@ -158,7 +160,9 @@ export default class Router extends EventEmitter {
       listenerKey = `${host}:${port}`;
     let listener = listeners.get(listenerKey);
     if (listener === undefined) {
-      listener = https.createServer(options); //TODO: stuff some function in here
+      listener = https.createServer(options, (request, response) => {
+        console.log(request, response)
+      }); //TODO: stuff some function in here
       listener.listening = new Promise((resolve, reject) => {
         listener.on('error', err => {
           listener.removeAllListeners('error').removeAllListeners('listening');

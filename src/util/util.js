@@ -1,5 +1,5 @@
 import util from 'util';
-import 'util-is';
+import uitlIs from 'core-util-is';
 
 const NETWORK_PORT_MIN = 0,
   NETWORK_PORT_MAX = 65536;
@@ -91,4 +91,4 @@ const extensions = {
   }
 };
 
-export default Object.assign(extensions, util);
+export default Object.assign(extensions, util, uitlIs);

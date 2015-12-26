@@ -68,6 +68,7 @@ const META_DIR_NAME = 'aps',
       v = v.toUpperCase();
       return LogEmitter.isLevelName(v) ? v : undefined;
     }],
+    'useBabel': ['babel usage', v => util.isBoolean(v) ? v : undefined],
     'dummy': ['dummy mode', v => util.isBoolean(v) ? v : undefined]
   };
 
@@ -95,9 +96,10 @@ export default class Endpoint extends EventEmitter {
       l.trace(`Configuration file representation:\n${util.stringify(parsed)}`);
       const custom = parsed;
       let defaults = {};
-      for (let v of ['host', 'port', 'virtualHost', 'logLevel', 'dummy'])
+      for (let v of ['host', 'port', 'virtualHost', 'logLevel', 'useBabel', 'dummy'])
         defaults[v] = this[v];
-      defaults.name = defaults.home = configName;
+      defaults.name = configValidators.name[1](configName);
+      defaults.home = configValidators.home[1](configName);
       const validator = new ConfigValidator(defaults, custom);
       validator.logEmitter.pipe(l);
       const config = validator.validate(configValidators);
@@ -180,6 +182,7 @@ export default class Endpoint extends EventEmitter {
       this.instances = new Map();
       if (instances === null) {
         l.info('No instances will be created (metadata directory did not exist)!');
+        typeCache = Promise.reject(new KnownError('Metadata directory did not exist'));
       } else {
         if (instances.length > 0) {
           instances.forEach(id => this.instances.set(id));
@@ -209,7 +212,7 @@ export default class Endpoint extends EventEmitter {
           return result;
         }, reason => {
           throw new KnownError(`Failed to read type cache file: ${reason.message}`);
-        }).reflect();
+        });
       }
       l.info(`Reading services code files from home directory: '${this.home}'...`);
       const services = this.services,
@@ -223,7 +226,7 @@ export default class Endpoint extends EventEmitter {
           try {
             new Function(text);
           } catch(e) {
-            throw new KnownError(`Syntax check failed for '${file}'!`);
+            throw new KnownError(`Syntax check failed for '${file}': ${e.message}!`);
           }
           l.debug(`Syntax check for '${file}' successful!`);
           this.services.set(service, {
@@ -234,7 +237,7 @@ export default class Endpoint extends EventEmitter {
           throw new KnownError(`Failed to read code file '${file}': ${reason.message}`);
         }));
       }
-      return Promise.join(typeCache, Promise.all(codeFiles));
+      return Promise.join(typeCache.reflect(), Promise.all(codeFiles));
     }).spread(typeCache => {
       const l = this.logger;
       if (typeCache.isFulfilled()) {
@@ -253,7 +256,7 @@ export default class Endpoint extends EventEmitter {
         });
       }, reason => {
         l.error(`Failed to open type cache file for writing: ${reason.message}. Only in-memory cache will be used!`);
-      }).reflect();
+      });
       const instanceStates = [],
         instances = this.instances;
       instances.forEach((v, id) => {
@@ -271,7 +274,7 @@ export default class Endpoint extends EventEmitter {
         instances.set(id, instance);
         instanceStates.push(instance.started.reflect());
       });
-      return Promise.join(typeCacheStream, Promise.all(instanceStates).then(() => {
+      return Promise.join(typeCacheStream.reflect(), Promise.all(instanceStates).then(() => {
         l.info('Removing instances that failed to start...');
         const instances = this.instances;
         instances.forEach((instance, id) => {
@@ -348,6 +351,14 @@ export default class Endpoint extends EventEmitter {
     return this.prototype.dummy;
   }
 
+  static set defaultUseBabel(flag) {
+    this.prototype.useBabel = !!flag;
+  }
+
+  static get defaultUseBabel() {
+    return this.prototype.useBabel;
+  }
+
   static set relativeHomeRoot(directoryPath) {
     directoryPath = String(directoryPath);
     if (path.isAbsolute(directoryPath))
@@ -386,5 +397,6 @@ Endpoint.defaultHost = '0.0.0.0';
 Endpoint.defaultPort = '443';
 Endpoint.defaultVirtualHost = null;
 Endpoint.defaultLogLevel = 'TRACE';
+Endpoint.defaultUseBabel = true;
 Endpoint.defaultDummy = false;
 Endpoint.relativeHomeRoot = (os.platform() === 'win32' ? (process.env.SystemDrive || 'C:' )  : '') + path.sep; // 'C:\' on proprietary crap, '/' on others
