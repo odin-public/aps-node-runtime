@@ -383,8 +383,10 @@ export default class Endpoint extends EventEmitter {
     return ('name' in this) ? `(${this.virtualHost || '*'})${this.host}:${this.port}/${this.name}` : '';
   }
 
-  handleRequest(request) {
-
+  handleRequest(incoming, outgoing) {
+    incoming.ready.then(() => {
+      outgoing.end('Handled in endpoint ' + incoming.body.length);
+    });
   }
 
   stop() {

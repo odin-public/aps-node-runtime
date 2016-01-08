@@ -12,6 +12,7 @@ import KnownError from './util/knownError.js';
 import Logger from './util/logger.js';
 import ConfigValidator from './util/configValidator.js';
 import Router from './runtime/router.js';
+import { Outgoing } from './runtime/message.js';
 import Endpoint from './runtime/endpoint.js';
 
 Promise.promisifyAll(fs);
@@ -185,6 +186,7 @@ function start() {
     Endpoint.defaultLogLevel = c.ENDPOINT_CONFIG.logLevel;
     Endpoint.defaultDummy = c.ENDPOINT_CONFIG.dummy;
     Endpoint.relativeHomeRoot = getAssetPath(c.ENDPOINT_DIR);
+    Outgoing.defaultHeaders['X-Powered-By'] = `APS Node.js Runtime v${c.VERSION}`;
     l.debug(`Selecting configuration files in the endpoints directory (*${ENDPOINT_CONFIG_SUFFIX})...`);
     const loggers = new Map(),
       endpoints = endpointsListing.filter(v => (v.length > ENDPOINT_CONFIG_SUFFIX.length) && v.endsWith(ENDPOINT_CONFIG_SUFFIX)); //no dotfiles
@@ -199,21 +201,30 @@ function start() {
         v.logEmitter.unpipe(endpointPrefix);
       });
     });
+    let privilegesDropped;
     if ('setuid' in process) {
-      router.on('listening', () => {
-        const id = c.IDENTITY;
-        l.info(`Router is now listening. Switching privileges to: '${id}'...`);
-        process.setgid(id);
-        process.setegid(id);
-        process.setuid(id);
-        process.seteuid(id);
-        l.info(`Set original and effective user ID and group ID to: '${id}'!`);
+      privilegesDropped = new Promise((resolve, reject) => {
+        router.on('listening', () => {
+          const id = c.IDENTITY;
+          try {
+            l.info(`Router is now listening. Switching privileges to: '${id}'...`);
+            process.setgid(id);
+            process.setegid(id);
+            process.initgroups(id, id);
+            process.setuid(id);
+            process.seteuid(id);
+            l.info(`Set original and effective user ID and group ID to: '${id}'!`);
+            resolve();
+          } catch(e) {
+            reject(new KnownError(`Unable to switch privileges to: '${id}', ${e.message}`));
+          }
+        });
       });
     }
     router.logEmitter.pipe(l.pushPrefix('[Router]'));
-    return router.started.catch(reason => {
+    return Promise.join(router.started.catch(reason => {
       throw new KnownError(`Router was unable to start: ${KnownError.stringify(reason)}!`);
-    });
+    }), privilegesDropped);
   }).then(() => {
     l.info(`Daemon was started successfully!`);
     send(router.printTable(), 'success');

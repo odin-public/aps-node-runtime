@@ -1,4 +1,5 @@
 import util from 'util';
+import crypto from 'crypto';
 import uitlIs from 'core-util-is';
 
 const NETWORK_PORT_MIN = 0,
@@ -53,11 +54,17 @@ const extensions = {
       pre = ' ' + (binary ? 'KMGTPE' : 'kMGTPE').charAt(exp - 1) + (binary ? 'i' : '') + 'B';
     return (bytes / Math.pow(unit, exp)).toFixed(precision) + pre;
   },
-  createUuid(max = Math.pow(2,32), radix = 16) { // TODO: removal pending
-    if ((max < 0) || (max > Math.pow(10,16)))
-      throw new RangeError('Maximum must be between 0 and 10^16');
-    const uuid = Math.round(Math.random() * max);
-    return Number.isSafeInteger(radix) ? uuid.toString(radix) : uuid;
+  formatHrTime(hrtime) {
+    return `${hrtime[0]}.${extensions.pad(hrtime[1], 9)}`;
+  },
+  pad(string, length, char = '0') {
+    string = String(string);
+    length = parseInt(length, 10);
+    char = String(char);
+    return `${(char.repeat(length) + string).slice(-length)}`;
+  },
+  createUuid(length = 32) {
+    return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(length % 2);
   },
   pipeTree: function pipeTree(obj, prefix, opts) {
     if (prefix === undefined) prefix = '';
