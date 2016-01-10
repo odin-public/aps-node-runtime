@@ -15,7 +15,6 @@ import { LogEmitter } from '../util/logger.js';
 import KnownError from '../util/knownError.js';
 import util from '../util/util.js';
 
-
 Promise.promisifyAll(dns);
 Promise.promisifyAll(https);
 
@@ -45,8 +44,8 @@ export default class Router extends EventEmitter {
         key: tlsKey,
         cert: tlsCert
       });
-    } catch(e) {
-      throw new Error(`Failed to use the provieded TLS credentials: ${e.message}`);
+    } catch (e) {
+      throw new Error(`Failed to use the provided TLS credentials: ${e.message}`);
     }
     this.tlsKey = tlsKey;
     this.tlsCert = tlsCert;
@@ -91,7 +90,7 @@ export default class Router extends EventEmitter {
               l.error(`Failed to bind to: ${listenerKey}: ${reason.message}`);
             });
           }
-        } catch(e) {
+        } catch (e) {
           throw new KnownError(`Failed to attach: ${e.message}`);
         }
       });
@@ -105,7 +104,7 @@ export default class Router extends EventEmitter {
     })).then(states => {
       if (!states.some(v => v.isFulfilled()))
         throw new KnownError('No endpoints could initialize');
-      l.info(`Initialized! Dropped ${util.pluralize('endpoint', dropped.length)}. Current routing table:\n${this.printTable()}`);
+      l.info(`Initialized successfully! Dropped ${util.pluralize('endpoint', dropped.length)}. Current routing table:\n${this.printTable()}`);
       return dropped;
     });
     this.started = this.initialized.then(() => {
@@ -136,7 +135,7 @@ export default class Router extends EventEmitter {
         throw new KnownError('No endpoints could start');
       l.info(`Endpoints have started!`);
       dropped.push(...this._cleanupTable());
-      l.info(`Started! Dropped ${util.pluralize('endpoint', dropped.length)} in total. Current routing table:\n${this.printTable()}`);
+      l.info(`Started successfully! Dropped ${util.pluralize('endpoint', dropped.length)} in total. Current routing table:\n${this.printTable()}`);
       return dropped;
     });
     this.started.catch(reason => {
@@ -176,7 +175,8 @@ export default class Router extends EventEmitter {
       listeners = this.listeners,
       options = {
         key: this.tlsKey,
-        cert: this.tlsCert
+        cert: this.tlsCert,
+        requestCert: true
       },
       {host, port} = endpoint,
       listenerKey = `${host}:${port}`;
@@ -275,7 +275,7 @@ export default class Router extends EventEmitter {
       outgoing = new Outgoing(response);
     } catch (err) {
       if (response.ended)
-        l.error(`Unable to handle request from '${peer}': \'response\' object is no longer writable!`);
+        l.error(`Unable to handle request from '${peer}': 'response' object is no longer writable!`);
       else {
         const httpError = new Error(`Unknown error: ${err.message}`);
         response.writeHead(httpError.code = HTTP_CODES.GENERAL_ERROR, Outgoing.defaultHeaders);
@@ -296,32 +296,34 @@ export default class Router extends EventEmitter {
         rl = l.pushPrefix(`[R:${id}]`);
       l.info(`Received a request from '${peer}', assigned ID: '${id}'...`);
       incoming = new Incoming(request);
-      outgoing.handled.timeout(this.timeout * 1000, `Timeout reached after ${util.pluralize('second', this.timeout)}`).then(() => {
-        l.info(`Request with ID: '${id}' was handled. Code: ${outgoing.code} (${STATUS_CODES[outgoing.code]}), time elapsed: ${incoming.elapsed(outgoing)} seconds.`);
-      }, reason => {
-        let message;
-        if (reason instanceof Promise.TimeoutError) {
-          l.info(`Request with ID: '${id}' timed out (${this.timeout} seconds). Closing!`);
-          const httpError = new Error(`Request was not handled within a timeout`);
-          outgoing.code = httpError.code = HTTP_CODES.TIMEOUT;
-          outgoing.end(httpError);
-          message = reason.message;
-        } else {
-          message = `Unknown error: ${reason.stack}`;
+      outgoing.handled.timeout(this.timeout * 1000).reflect().then(state => {
+        if (state.isRejected()) {
+          const reason = state.reason();
+          let httpError;
+          if (reason instanceof Promise.TimeoutError) {
+            rl.debug(`Timeout reached after ${util.pluralize('second', this.timeout)}`);
+            httpError = new Error(`Request was not handled within a timeout`);
+            outgoing.code = httpError.code = HTTP_CODES.TIMEOUT;
+          } else {
+            httpError = new Error(`Unknown error: ${reason.message}`);
+            outgoing.code = httpError.code = HTTP_CODES.GENERAL_ERROR;
+            rl.error(`Failed to handle due to unkown error: ${reason.stack}`);
+          }
+          return outgoing.end(httpError);
         }
-        l.error(`Failed to handle request with ID: '${id}': ${message}`);
-      });
+      }).then(() => l.info(`Request with ID: '${id}' was handled. Code: ${outgoing.code} (${STATUS_CODES[outgoing.code]}), time elapsed: ${incoming.elapsed(outgoing)} seconds.`));
       if (!incoming.isValid()) {
         const err = new Error(`Validation error: ${incoming.validationError.message}`);
-        rl.error(err.message);
+        rl.debug(err.message);
+        rl.trace(`Request dump:\n${incoming.dump()}`);
         outgoing.code = err.code = HTTP_CODES.INVALID_REQUEST;
         outgoing.end(err);
         return;
       }
       const endpointName = incoming.endpoint,
         virtualHost = incoming.headers.host;
-      rl.debug(`Endpoint name: '${endpointName}'`);
-      rl.debug(`Virtual host: '${virtualHost || 'None'}'`);
+      rl.debug(`Endpoint name: '${endpointName}'.`);
+      rl.debug(`Virtual host: '${virtualHost || 'None'}.'`);
       let destination;
       try {
         endpoints.forEach(endpoint => {
@@ -332,17 +334,17 @@ export default class Router extends EventEmitter {
               destination = endpoint;
           }
         });
-      } catch(endpoint) {
+      } catch (endpoint) {
         destination = endpoint;
       }
       if (destination === undefined) {
-        l.debug(`No matching endpoint found for request with ID: '${id}'!`);
+        rl.debug(`No matching endpoint found!`);
         const err = new Error(`Endpoint with name: '${endpointName}' not found on this host${virtualHost === null ? '' : ': \'' + virtualHost + '\''}`);
         outgoing.code = err.code = HTTP_CODES.ENDPOINT_NOT_FOUND;
         outgoing.end(err);
       } else {
-        l.debug(`Passing request with ID: '${id}' to the endpoint with ID: '${this.objectKeys.get(destination)}' and key: '${destination.key}'...`);
-        destination.handleRequest(incoming, outgoing);
+        rl.debug(`Passing to the endpoint with ID: '${this.objectKeys.get(destination)}' and key: '${destination.key}'...`);
+        destination.handleRequest(incoming, outgoing, id);
       }
     } catch (err) {
       const httpError = new Error(`Unknown error: ${err.message}`);

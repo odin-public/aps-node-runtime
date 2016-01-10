@@ -1,5 +1,5 @@
 import url from 'url';
-import http from 'http';
+import http, { STATUS_CODES } from 'http';
 import path from 'path';
 import Promise from 'bluebird';
 import Endpoint from './endpoint.js';
@@ -24,7 +24,7 @@ function isHttpToken(string) {
 
 export class Incoming {
   constructor(request) {
-    if(!(request instanceof http.IncomingMessage))
+    if (!(request instanceof http.IncomingMessage))
       throw new Error('\'request\' must be an instance of \'http.IncomingMessage\'');
     if (request.ended)
       throw new Error('\'request\' is no longer readable');
@@ -65,7 +65,7 @@ export class Incoming {
       if (!aps.isResourceId(instance))
         throw new Error(`Instance ID is invalid: '${instance}'`);
       this.instance = instance;
-    } catch(err) {
+    } catch (err) {
       this.validationError = err;
     }
     delete headers[HEADERS.INSTANCE_ID];
@@ -77,6 +77,8 @@ export class Incoming {
     delete headers[HEADERS.APS_VERSION];
     this.headers = Object.assign({}, headers);
     request.setEncoding('utf-8');
+    this.certificate = request.socket.getPeerCertificate(true);
+    this.certificate = (util.isObject(this.certificate) && Buffer.isBuffer(this.certificate.raw)) ? this.certificate : undefined;
     this._http = request;
     this.remoteAddress = request.socket.remoteAddress; //TODO: Find a better way to use those fields
     this.body = '';
@@ -105,6 +107,10 @@ export class Incoming {
     return !this.validationError;
   }
 
+  dump(body = false) {
+    return `${this.method} ${this._http.url}\n${util.stringify(this._http.headers)}${(this.body && body) ? '\n\n' + this.body : ''}`;
+  }
+
   parseBody() {
     if (this.ready.isFulfilled())
       return this.bodyObject = JSON.parse(this.body);
@@ -115,6 +121,8 @@ export class Incoming {
   elapsed(outgoing) {
     if (!(outgoing instanceof Outgoing))
       throw new Error('\'outgoing\' argument must be an instance of \'Outgoing\'');
+    if (outgoing.handled.isPending())
+      throw new Error('\'outgoing\' is not handled yet');
     const created = this.times[pid].created,
       handled = outgoing.times[pid].handled;
     return util.formatHrTime([handled[0] - created[0], handled[1] - created[1]]);
@@ -123,7 +131,7 @@ export class Incoming {
 
 export class Outgoing {
   constructor(response) {
-    if(!(response instanceof http.ServerResponse))
+    if (!(response instanceof http.ServerResponse))
       throw new Error('\'response\' must be an instance of \'http.ServerResponse\'');
     if (response.ended)
       throw new Error('\'response\' is no longer writable');
@@ -198,6 +206,10 @@ export class Outgoing {
     return this._body;
   }
 
+  dump(body = false) {
+    return `${this.code} (${STATUS_CODES[this.code]})\n${util.stringify(this._headers)}${(this.body && body) ? '\n\n' + this.body : ''}`;
+  }
+
   end(value) {
     if (value !== undefined)
       this.body += Outgoing.transformBody(value);
@@ -216,14 +228,14 @@ Incoming.prototype._recordTime = Outgoing.prototype._recordTime = function _reco
   this.times[pid][name] = value;
 };
 
+Outgoing.prototype.code = 200;
+
 Outgoing.defaultHeaders = {
   'Server': `Node.js ${process.version}`
 };
-
-Outgoing.prototype.code = 200;
 
 export default {
   Incoming,
   Outgoing,
   isHttpToken
-}
+};

@@ -14,6 +14,7 @@ import ConfigValidator from './util/configValidator.js';
 import Router from './runtime/router.js';
 import { Outgoing } from './runtime/message.js';
 import Endpoint from './runtime/endpoint.js';
+import Instance from './runtime/instance.js';
 
 Promise.promisifyAll(fs);
 
@@ -33,10 +34,10 @@ const ENDPOINT_CONFIG_SUFFIX = '.json',
   l = new Logger(getAssetPath(c.LOG_DIR, LOG_NAME));
 
 function send(message, type = 'error') { //TODO: this crap is affected by iojs/#760, beware
-  return process.send({
+  return process.connected ? process.send({
     type,
     message
-  });
+  }) : undefined;
 }
 
 function exit(code) {
@@ -46,10 +47,14 @@ function exit(code) {
 
 process // TODO: make this use log when its available
   .on('uncaughtException', error => {
+    if (l.isReady() !== false)
+      l.critical(`Unhandled error: ${error.stack}`);
     send(error.stack);
     exit(EXIT_GENERAL_FAILURE);
   })
   .on('unhandledRejection', reason => {
+    if (l.isReady() !== false)
+      l.critical(`Unhandled error: ${util.isError(reason) ? reason.stack : reason}`);
     send(util.isError(reason) ? reason.stack : reason);
     exit(EXIT_GENERAL_FAILURE);
   });
@@ -92,7 +97,7 @@ function start() {
   l.info(`Reading main configuration file: '${configPath}'...`);
   l.info(`Reading main TLS private key file: '${tlsKeyPath}'...`);
   l.info(`Reading main TLS certificate file: '${tlsCertPath}'...`);
-  l.info(`Listing endpoints directory: '${endpointsPath}'...`);  
+  l.info(`Listing endpoints directory: '${endpointsPath}'...`);
   return Promise.join(fs.readFileAsync(configPath, 'utf-8').then(text => { //TODO: make custom config-reading function with length limit
     l.debug('Main configuration file was read successfully!');
     l.trace(`Main configuration file contents:\n${text}`);
@@ -147,7 +152,7 @@ function start() {
       tls.createSecureContext({
         key: text
       });
-    } catch(e) {
+    } catch (e) {
       throw new KnownError(`Failed to validate main TLS private key file contents: ${e.message}!`);
     }
     l.debug('Main TLS private key file contents were validated successfully!');
@@ -162,7 +167,7 @@ function start() {
       tls.createSecureContext({
         cert: text
       });
-    } catch(e) {
+    } catch (e) {
       throw new KnownError(`Failed to validate main TLS certificate file contents: ${e.message}!`);
     }
     l.debug('Main TLS certificate file contents were validated successfully!');
@@ -180,12 +185,15 @@ function start() {
   }, reason => {
     throw new KnownError(`Failed to list endpoints directory: ${reason.message}`);
   }), (config, tlsKey, tlsCert, endpointsListing) => {
+    l.info('Configuring components...');
     Endpoint.defaultHost = config.defaultHost;
     Endpoint.defaultPort = config.defaultPort;
     Endpoint.defaultVirtualHost = config.defaultVirtualHost;
     Endpoint.defaultLogLevel = c.ENDPOINT_CONFIG.logLevel;
     Endpoint.defaultDummy = c.ENDPOINT_CONFIG.dummy;
     Endpoint.relativeHomeRoot = getAssetPath(c.ENDPOINT_DIR);
+    Instance.defaultLogLevel = c.INSTANCE_CONFIG.logLevel;
+    Instance.defaultCheckCertificate = c.INSTANCE_CONFIG.checkCertificate;
     Outgoing.defaultHeaders['X-Powered-By'] = `APS Node.js Runtime v${c.VERSION}`;
     l.debug(`Selecting configuration files in the endpoints directory (*${ENDPOINT_CONFIG_SUFFIX})...`);
     const loggers = new Map(),
@@ -215,7 +223,7 @@ function start() {
             process.seteuid(id);
             l.info(`Set original and effective user ID and group ID to: '${id}'!`);
             resolve();
-          } catch(e) {
+          } catch (e) {
             reject(new KnownError(`Unable to switch privileges to: '${id}', ${e.message}`));
           }
         });
@@ -228,5 +236,7 @@ function start() {
   }).then(() => {
     l.info(`Daemon was started successfully!`);
     send(router.printTable(), 'success');
+    process.stdin.pause();
+    Promise.delay(1000).then(() => console.log('asdasd'));
   });
 }

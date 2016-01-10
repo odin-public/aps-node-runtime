@@ -36,7 +36,8 @@ function exit(message, success = false) {
 log('Starting APS Node.js daemon... ', false);
 
 const daemon = child_process.fork('daemon.js', {
-  stdio: 'ignore'
+  //silent: true
+  //stdio: ['ignore', 'ignore', 'ignore']
 });
 
 daemon

@@ -28,7 +28,7 @@ export class Logger {
     }
     this.path = path;
     this._pending = [];
-    this._emitters = new Set();
+    //this._emitters = new Set();
     (this.ready = fs.openAsync(path, 'a', mode)).then(fd => {
       this._stream = fs.createWriteStream(null, {
         encoding: 'utf-8',
@@ -72,9 +72,9 @@ export class Logger {
   }
 
   _write(date, level, prefix, data) {
-    if (level === LEVEL_NOLEVEL) 
+    if (level === LEVEL_NOLEVEL)
       level = '';
-    else if (level >= this._level) 
+    else if (level >= this._level)
       level = `[${levels[level]}]`;
     else
       return;
@@ -133,7 +133,7 @@ export class Logger {
 
   isReady() {
     if (!this.ready.isPending())
-      return (this._stream && this._stream._writableState.ending) ? false : this.ready.isFulfilled();
+      return ((!this._stream) || (this._stream && this._stream._writableState.ending)) ? false : this.ready.isFulfilled();
   }
 
   isActive() {
@@ -146,8 +146,8 @@ export class Logger {
         return this.close();
       });
     else {
-      for (let v of this._emitters)
-        v.unpipe(this);
+      //for (let v of this._emitters)
+      //  v.unpipe(this);
       this.dropPending();
       if ('_stream' in this) {
         const promise = this._stream.endAsync();
@@ -183,7 +183,7 @@ export class LogEmitter extends EventEmitter {
 
   unpipeAll() {
     const size = this._receivers.size;
-    this._receivers.forEach(v => v._emitters.delete(this));
+    //this._receivers.forEach(v => v._emitters.delete(this));
     this._receivers.clear();
     return size;
   }

@@ -23,7 +23,7 @@ export default class ConfigValidator {
       result = {};
     for (let key in validators) {
       let value = config[key],
-        normalized, 
+        normalized,
         [name, checker] = validators[key],
         level,
         message = `${util.capitalize(name)} set to:`,
