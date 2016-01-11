@@ -353,8 +353,6 @@ export default class Instance {
       methodId = method.toLowerCase();
     let httpError,
       constructor;
-
-        rl.info(util.inspect(incoming._http.socket.getPeerCertificate().raw.toString('base64')));
     try {
       constructor = service.run(this.context, this.getHelper(incoming)).exports;
     } catch(err) {
