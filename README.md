@@ -1,6 +1,8 @@
 # aps-node-runtime
 APS Endpoint Runtime implementation in Node.js
 
+This repository uses **git flow**.
+
 ## How do I test it?
 
 Currently, about **80%** of insfrastructure and routing is completed. However, only about **5%** of user code API and APS functionality is done. If you want to go ahead and test what's working, follow the steps below, and remember, **contributions are welcome in all forms (issues, pull requests, etc.)**.
