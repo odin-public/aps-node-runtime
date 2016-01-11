@@ -1,9 +1,9 @@
 #!/bin/sh
 
+cd HOME_DIR
+
 NODE=node
 PID=`cat daemon.pid 2>/dev/null`
-
-cd HOME_DIR
 
 function start {
   [ -f daemon.pid ] && { echo "Daemon appears to be running, PID:" $PID; exit; }

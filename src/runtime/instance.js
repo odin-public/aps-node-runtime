@@ -109,6 +109,8 @@ export default class Instance {
       for (let key in configValidators)
         config[key] = this[key];
       ConfigValidator.logConfig(l, configValidators, this);
+      l.info(`Setting log level to '${this.logLevel}'...`);
+      l1.level = Logger[this.logLevel];
       l.info(`Opening log file: '${logPath}'...`);
       l.info(`Saving instance TLS certificate to file: '${selfCertPath}'...`);
       l.info(`Saving instance TLS key to file: '${selfKeyPath}'...`);
@@ -249,6 +251,8 @@ export default class Instance {
         const config = validator.validate(configValidators);
         validator.logEmitter.unpipe(l);
         Object.assign(this, config);
+        l.info(`Setting log level to '${this.logLevel}'...`);
+        l1.level = Logger[this.logLevel];
       }, reason => {
         throw new KnownError(`Failed to read configuration file: ${reason.message}`);
       }));
