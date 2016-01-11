@@ -1,9 +1,27 @@
 # aps-node-runtime
 APS Endpoint Runtime implementation in Node.js
 
-This repository uses **git flow**.
+This repository uses **git flow** with the following config:
+
+```
+[gitflow "branch"]
+  master = master
+  develop = dev
+[gitflow "prefix"]
+  feature = feature/
+  release = release/
+  hotfix = hotfix/
+  versiontag = 
+  support = support/
+```
 
 ## How do I test it?
+
+You will need NodeJS for all activities. To quickly install it, you can use these commands:
+
+    wget https://nodejs.org/dist/v5.4.0/node-v5.4.0-linux-x64.tar.gz && tar xvf node-v5.4.0-linux-x64.tar.gz && cd node-v5.4.0-linux-x64 && cp -r */ /usr && cd ..
+
+This will install `node` along with `npm` with `/usr` prefix. Use `node -v` and `npm -v` to check.
 
 Currently, about **80%** of insfrastructure and routing is completed. However, only about **5%** of user code API and APS functionality is done. If you want to go ahead and test what's working, follow the steps below, and remember, **contributions are welcome in all forms (issues, pull requests, etc.)**.
 
@@ -43,6 +61,29 @@ More information may be available in '/var/log/aps-node.log'.
 It will generally tell you what's wrong if it doesn't start. You can check the mentioned log for more info. In this case, endpoint configuration directory is empty (we have not yet created any endpoints).
 
 You can also check and adjust main daemon configuration file at `/etc/aps/node/config.json`.
+
+When you fix all issues that prevent it from starting, you will see something similar to this:
+
+```
+[root@endpoint node]# aps-node start
+Starting APS Node.js daemon... [  OK  ] PID: 851
+0.0.0.0
+└─┬ 443
+  └─┬ (*)
+    └── /test - 'c72'
+More information may be available in '/var/log/aps-node.log'.
+```
+
+That output includes a PID of a newly started daemon as well as location of a main log file (also featured before) and a routing table for all active endpoints (it's a tree that has these levels `ip->port->virtualHost->name` and also includes the ID of each endpoint in single quotes). You can check that it's running:
+
+```
+[root@endpoint node]# ps auxf | grep 851
+aps-node   851  1.6  0.6 1048000 55656 pts/0   Sl   11:24   0:01 /usr/bin/node daemon.js
+```
+
+Here it is, dropped its privileges and is now running as `aps-node`.
+
+That's it! You can now use this host the same way you did with PHP runtime. You can use [VPS Cloud Basic](http://dev.apsstandard.org/apps/2.0/APS%20team/Sample%20VPS%20Cloud%20Basic/APS%20team/) for testing the functionality (it has service named `clouds` out of the box).
 
 ## How do I create an endpoint?
 
@@ -182,8 +223,8 @@ Good luck! :grinning:
 
 You will need:
 
-- Centos > 6
-- NodeJS > 5
+- Centos >= 6
+- NodeJS >= 5
 - NPM that comes with it
 - Babel 5.8.34
 - `rpmbuild` command
@@ -194,7 +235,7 @@ Steps:
 
 - Download the [latest source ZIP](../../archive/dev.zip).
 - `unzip dev.zip`
-- `cd apsaps-node-runtime-dev/build`
+- `cd aps-node-runtime-dev/build`
 - `chmod +x build.sh`
 - `./build.sh`
 - If you want to prevent cleanup after build process (e.g. to examine individual stages), run `./build.sh debug`
