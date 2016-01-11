@@ -1,0 +1,6 @@
+{
+	"preset": "grunt",
+	"requireCurlyBraces": null,
+	"disallowMultipleVarDecl": null,
+	"maximumLineLength": null
+}
