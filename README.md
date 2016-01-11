@@ -5,7 +5,7 @@ APS Endpoint Runtime implementation in Node.js
 
 Currently, about **80%** of insfrastructure and routing is completed. However, only about **5%** of user code API and APS functionality is done. If you want to go ahead and test what's working, follow the steps below, and remember, **contributions are welcome in all forms (issues, pull requests, etc.)**.
 
-You need a working OA 6.0 installation with APS. Download the latest RPM from [releases](../../releases) section or [build it yourself](#building-from-source).
+You need a working OA 6.0 installation with APS. Download the latest RPM from [releases](../../releases) section or [build it yourself](#building-rpm-from-source).
 
 Use your RPM to install the runtime on the endpoint host (it needs to have **NodeJS of version 5 and above** already installed and available in `PATH`):
 
