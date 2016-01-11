@@ -191,6 +191,7 @@ function start() {
     Endpoint.defaultVirtualHost = config.defaultVirtualHost;
     Endpoint.defaultLogLevel = c.ENDPOINT_CONFIG.logLevel;
     Endpoint.defaultDummy = c.ENDPOINT_CONFIG.dummy;
+    Endpoint.defaultUseBabel = c.ENDPOINT_CONFIG.useBabel;
     Endpoint.relativeHomeRoot = getAssetPath(c.ENDPOINT_DIR);
     Instance.defaultLogLevel = c.INSTANCE_CONFIG.logLevel;
     Instance.defaultCheckCertificate = c.INSTANCE_CONFIG.checkCertificate;

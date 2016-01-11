@@ -13,8 +13,9 @@ var config = {
     defaultVirtualHost: null
   },
   ENDPOINT_CONFIG: {
-    logLevel: 'TRACE',
-    dummy: false
+    dummy: false,
+    useBabel: true,
+    logLevel: 'TRACE'
   },
   INSTANCE_CONFIG: {
     logLevel: 'TRACE',
