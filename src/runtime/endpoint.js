@@ -248,7 +248,7 @@ export default class Endpoint extends EventEmitter {
           let result;
           try {
             result = service.run(context);
-          } catch(err) {
+          } catch (err) {
             throw new KnownError(`Unknown error while performing a dry run on VM for service with ID: '${serviceId}': ${err.stack}`);
           }
           if (typeof result.exports !== 'function')
@@ -416,7 +416,7 @@ export default class Endpoint extends EventEmitter {
       throw new Error('TLS credentials object does not contain instance data (key: \'self\')');
     if (!('controller' in object))
       throw new Error('TLS credentials object does not contain APSC data (key: \'controller\')');
-    const { self, controller } = object,
+    const {self, controller} = object,
       selfSplit = self.split(RSA_KEY_START);
     if (selfSplit.length <= 1)
       throw new Error('Instance TLS credentials do not contain private key');
@@ -481,7 +481,7 @@ export default class Endpoint extends EventEmitter {
       rl.debug(`Matching instance found! Passing request...`);
       try {
         destination.handleRequest(service, incoming, outgoing, id);
-      } catch(err) {
+      } catch (err) {
         rl.error(`Unknown error while trying to pass the request to instance: ${err.stack}`);
         const httpError = new Error(`Failed to pass request to instance: ${err.message}`);
         httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -491,12 +491,12 @@ export default class Endpoint extends EventEmitter {
     }
     rl.debug(`Matching instance not found! Checking if it can be created from request...`);
     let httpError = new Error(`Instance with ID: '${instanceId}' not found`);
-    httpError.code = HTTP_CODES.INSTANCE_NOT_FOUND; 
+    httpError.code = HTTP_CODES.INSTANCE_NOT_FOUND;
     if (incoming.method.toLowerCase() === 'post') {
       incoming.ready.then(() => {
         try {
           incoming.parseBody();
-        } catch(err) {
+        } catch (err) {
           rl.debug(`No instance will be created, error when parsing body: ${err.message}!`);
           httpError = new Error(`${httpError.message} and unable to parse request body`);
           httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -506,7 +506,7 @@ export default class Endpoint extends EventEmitter {
         let keys;
         try {
           keys = Endpoint.keysFromRequest(incoming);
-        } catch(err) {
+        } catch (err) {
           rl.debug(`No instance will be created, unable to extract keys: ${err.message}`);
           httpError = new Error(`${httpError.message} and unable to extract keys from request body`);
           outgoing.end(httpError);
@@ -525,7 +525,7 @@ export default class Endpoint extends EventEmitter {
           instances.set(instanceId, destination);
           l.info(`Instance with ID: '${instanceId}' was created from request with ID: '${id}'...`);
           l.debug(`Following instances are available: '${instanceIds.join('\', \'')}'`);
-        } catch(err) {
+        } catch (err) {
           rl.error(`Failed to create instance: ${err.message}`);
           httpError = new Error(`${httpError.message} and unable to create instance due to unknown error: ${err.message}`);
           httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -535,7 +535,7 @@ export default class Endpoint extends EventEmitter {
           rl.debug(`Instance started successfully! Passing request...`);
           try {
             destination.handleRequest(service, incoming, outgoing, id);
-          } catch(err) {
+          } catch (err) {
             rl.error(`Unknown error while trying to pass the request to instance: ${err.stack}`);
             httpError = new Error(`Failed to pass request to instance: ${err.message}`);
             httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;

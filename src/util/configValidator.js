@@ -1,7 +1,7 @@
 import util from './util.js';
 import { Logger, LogEmitter, LoggerProxy } from './logger.js';
 
-const newLine = '\n';
+const NEW_LINE = '\n';
 
 export default class ConfigValidator {
   constructor(defaults, overrides) {
@@ -55,8 +55,8 @@ export default class ConfigValidator {
       }
       result[key] = value;
       value = util.stringify(value);
-      if (value.indexOf(newLine) !== -1)
-        value = newLine + value;
+      if (value.indexOf(NEW_LINE) !== -1)
+        value = NEW_LINE + value;
       l[level](`${message} ${value} (${reason})`);
     }
     return result;
@@ -70,8 +70,8 @@ export default class ConfigValidator {
         name = value[0];
       value = config[key];
       value = util.stringify(value);
-      if (value.indexOf(newLine) !== -1)
-        value = newLine + value;
+      if (value.indexOf(NEW_LINE) !== -1)
+        value = NEW_LINE + value;
       logger.info(`${util.capitalize(name)} set to: ${value}`);
     }
   }

@@ -62,7 +62,7 @@ export default class Instance {
           cert: selfCert,
           key: selfKey
         });
-      } catch(err) {
+      } catch (err) {
         throw new Error(`Failed to use provided instance TLS credentials: ${err.message}`);
       }
       let context;
@@ -70,7 +70,7 @@ export default class Instance {
         context = tls.createSecureContext({
           cert: apscCert
         }).context;
-      } catch(err) {
+      } catch (err) {
         throw new Error(`Failed to use provided APSC TLS certificate: ${err.message}`);
       }
       this.apscCertRaw = context.getCertificate();
@@ -208,7 +208,7 @@ export default class Instance {
             key: selfKey,
             cert: selfCert
           });
-        } catch(err) {
+        } catch (err) {
           throw new KnownError(`Failed to validate instance TLS certificate and key files contents`);
         }
         this.selfCert = selfCert;
@@ -222,7 +222,7 @@ export default class Instance {
           context = tls.createSecureContext({
             cert: text
           }).context;
-        } catch(err) {
+        } catch (err) {
           throw new KnownError(`Failed to validate APSC TLS certificate file contents`);
         }
         this.apscCert = text;
@@ -355,7 +355,7 @@ export default class Instance {
       constructor;
     try {
       constructor = service.run(this.context, this.getHelper(incoming)).exports;
-    } catch(err) {
+    } catch (err) {
       rl.error(`Error encountered while running service code: ${err.stack}`);
       httpError = new Error(`Unexpected error while running service code: ${err.message}`);
       httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -373,7 +373,7 @@ export default class Instance {
       incoming.ready.then(() => {
         try {
           incoming.parseBody();
-        } catch(err) {
+        } catch (err) {
           httpError = new Error(`Unable to parse request body: ${err.message}`);
           rl.debug(httpError.message);
           httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -383,7 +383,7 @@ export default class Instance {
         let resource;
         try {
           resource = Resource.create(incoming.bodyObject, constructor);
-        } catch(err) {
+        } catch (err) {
           rl.error(`Error encountered while constructing a resource: ${err.stack}`);
           httpError = new Error(`Unexpected error while constructing a resource: ${err.message}`);
           httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -395,7 +395,7 @@ export default class Instance {
             let result;
             try {
               result = resource.provision();
-            } catch(err) {
+            } catch (err) {
               httpError = new Error(`Error while provisioning: ${err.message}`);
               rl.error(`Error while provisioning: ${err.stack}`);
               httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -414,7 +414,7 @@ export default class Instance {
                   httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
                   outgoing.end(httpError);
                 });
-              } catch(err) {
+              } catch (err) {
                 httpError = new Error(`Failed to attach to the provisioning promise: ${err.message}`);
                 rl.error(`PFailed to attach to the provisioning promise: ${err.stack}`);
                 httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -440,7 +440,7 @@ export default class Instance {
       incoming.ready.then(() => {
         try {
           incoming.parseBody();
-        } catch(err) {
+        } catch (err) {
           httpError = new Error(`Unable to parse request body: ${err.message}`);
           rl.debug(httpError.message);
           httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -450,7 +450,7 @@ export default class Instance {
         let resource;
         try {
           resource = Resource.create(incoming.bodyObject, constructor);
-        } catch(err) {
+        } catch (err) {
           rl.error(`Error encountered while constructing a resource: ${err.stack}`);
           httpError = new Error(`Unexpected error while constructing a resource: ${err.message}`);
           httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -462,7 +462,7 @@ export default class Instance {
             let result;
             try {
               result = resource.configure(resource);
-            } catch(err) {
+            } catch (err) {
               httpError = new Error(`Error while configuring: ${err.message}`);
               rl.error(`Error while configuring: ${err.stack}`);
               httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -481,7 +481,7 @@ export default class Instance {
                   httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
                   outgoing.end(httpError);
                 });
-              } catch(err) {
+              } catch (err) {
                 httpError = new Error(`Failed to attach to the configuration promise: ${err.message}`);
                 rl.error(`PFailed to attach to the configuration promise: ${err.stack}`);
                 httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -507,7 +507,7 @@ export default class Instance {
       let resource;
       try {
         resource = Resource.create(incoming.bodyObject, constructor);
-      } catch(err) {
+      } catch (err) {
         rl.error(`Error encountered while constructing a resource: ${err.stack}`);
         httpError = new Error(`Unexpected error while constructing a resource: ${err.message}`);
         httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -519,7 +519,7 @@ export default class Instance {
           let result;
           try {
             result = resource.unprovision();
-          } catch(err) {
+          } catch (err) {
             httpError = new Error(`Error while unprovisioning: ${err.message}`);
             rl.error(`Error while Unprovisioning: ${err.stack}`);
             httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;

@@ -32,7 +32,7 @@ function exit(message, success = false) {
   daemon.unref();
   if (success)
     log(`${result.ok} PID: ${pid}`);
-  else 
+  else
     log(result.fail);
   log(message);
   log(`More information may be available in '${logPath}'.`);
