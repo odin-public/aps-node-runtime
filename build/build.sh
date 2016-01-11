@@ -2,8 +2,8 @@
 
 type npm >/dev/null 2>&1 || { echo >&2 "Unable to find 'npm'. Exiting"; exit 1; }
 type node >/dev/null 2>&1 || { echo >&2 "Unable to find 'node'. Exiting"; exit 1; }
-type babel >/dev/null 2>&1 || { echo >&2 "Unable to find 'babel' (npm -g i babel). Exiting"; exit 1; }
-type rpmbuild >/dev/null 2>&1 || { echo >&2 "Unable to find 'rpmbuild'. Exiting"; exit 1; }
+type babel >/dev/null 2>&1 || { echo >&2 "Unable to find 'babel' (npm -g i babel@5.8.34). Exiting"; exit 1; }
+type rpmbuild >/dev/null 2>&1 || { echo >&2 "Unable to find 'rpmbuild' (yum install rpm-build). Exiting"; exit 1; }
 
 PACKAGE_NAME=aps-node-runtime
 PACKAGE_VERSION=`node config.js VERSION`
