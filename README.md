@@ -1,7 +1,19 @@
 # aps-node-runtime
 APS Endpoint Runtime implementation in Node.js
 
-This repository uses **git flow**.
+This repository uses **git flow** with the following config:
+
+```
+[gitflow "branch"]
+  master = master
+  develop = dev
+[gitflow "prefix"]
+  feature = feature/
+  release = release/
+  hotfix = hotfix/
+  versiontag = 
+  support = support/
+```
 
 ## How do I test it?
 
