@@ -38,7 +38,7 @@ To generate keys (in CONFIG_DIR):
 
 cd CONFIG_DIR
 HOSTNAME=\`hostname\`
-openssl genrsa -out daemon.key
+openssl genrsa -out daemon.key 2048
 openssl req -x509 -new -nodes -key daemon.key -subj "/DC=APS/DC=Application Endpoint/O=\$HOSTNAME/OU=APS/CN=\$HOSTNAME" -out daemon.crt
 chmod 0600 daemon.{crt,key}
 

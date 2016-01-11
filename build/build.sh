@@ -17,6 +17,7 @@ BABEL_VERSION=`node config.js BABEL_VERSION`
 BLUEBIRD_VERSION=`node config.js BLUEBIRD_VERSION`
 MOMENT_VERSION=`node config.js MOMENT_VERSION`
 UTILIS_VERSION=`node config.js UTILIS_VERSION`
+SOURCEMAP_VERSION=`node config.js SOURCEMAP_VERSION`
 HOME_DIR=`node config.js HOME_DIR`
 CONFIG_DIR=`node config.js CONFIG_DIR`
 CONFIG_NAME=config.json
@@ -31,12 +32,14 @@ mkdir _src
 cp -r ../src/. _src
 node config.js > _src/util/constants.js
 #remove if no babel needed
-babel _src --out-dir _babel || exit 1
+npm list babel-plugin-source-map-support > /dev/null 2>&1 || npm i babel-plugin-source-map-support
+babel --source-maps inline --plugins source-map-support _src --out-dir _babel || exit 1
+rm -rf node_modules
 cp -r _babel/. src
 #end of removal
 #cp -r _src/. src
 cd src
-npm i babel@$BABEL_VERSION bluebird@$BLUEBIRD_VERSION moment@$MOMENT_VERSION core-util-is@$UTILIS_VERSION || exit 1
+npm i babel@$BABEL_VERSION bluebird@$BLUEBIRD_VERSION moment@$MOMENT_VERSION core-util-is@$UTILIS_VERSION source-map-support@$SOURCEMAP_VERSION || exit 1
 cd ..
 sed "s|PACKAGE_NAME|$PACKAGE_NAME|g; s|PACKAGE_VERSION|$PACKAGE_VERSION|g; s|PACKAGE_RELEASE|$PACKAGE_RELEASE|g; s|PROJECT_URL|$PROJECT_URL|g; s|CONFIG_NAME|$CONFIG_NAME|g; s|NODE_MIN|v${NODE_MIN_VERSION}|g; s|HOME_DIR|$HOME_DIR|g; s|CONFIG_DIR|$CONFIG_DIR|g; s|ENDPOINT_CONFIG_SUBDIR|$ENDPOINT_CONFIG_SUBDIR|g;s|ENDPOINT_DIR|$ENDPOINT_DIR|g; s|LOG_DIR|$LOG_DIR|g; s|IDENTITY|$IDENTITY|g; s|BIN_DIR|$BIN_DIR|g; s|CONTROL_SCRIPT_NAME|$CONTROL_SCRIPT_NAME|g" rpm.spec > _rpm.spec
 find src -type d -printf "%%dir \"$HOME_DIR/%P\"\n" >> _rpm.spec
