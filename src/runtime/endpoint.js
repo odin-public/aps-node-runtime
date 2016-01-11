@@ -562,10 +562,6 @@ export default class Endpoint extends EventEmitter {
     }
   }
 
-  _handleRequestWithInstance(instance, incoming, outgoing) { //TODO: Change this place when process model gets finalized
-
-  }
-
   stop() {
     this.started.finally(() => {
     });

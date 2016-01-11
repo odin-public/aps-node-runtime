@@ -1,0 +1,26 @@
+#!/bin/sh
+
+NODE=node
+PID=`cat daemon.pid 2>/dev/null`
+
+cd HOME_DIR
+
+function start {
+  [ -f daemon.pid ] && { echo "Daemon appears to be running, PID:" $PID; exit; }
+  $NODE control.js
+}
+
+function stop {
+  [ -f daemon.pid ] || { echo "No PID file found: daemon.pid"; exit; }
+  kill -9 $PID > /dev/null 2>&1 || { echo "Could not kill the daemon process, PID:" $PID; exit; }
+  rm -f daemon.pid
+}
+
+function restart {
+  stop
+  start
+}
+
+[ "$1" = "start" ] && start && exit
+[ "$1" = "stop" ] && stop && exit
+[ "$1" = "restart" ] && restart && exit

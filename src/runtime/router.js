@@ -155,7 +155,7 @@ export default class Router extends EventEmitter {
     return this._timeout;
   }
 
-  _attachEndpoint(id) { // TODO: probably better to add error for identical home dirs
+  _attachEndpoint(id) {
     const endpoint = this.endpoints.get(id);
     if (endpoint  === undefined)
       throw new KnownError(`Endpoint with ID: '${id}' not found`);

@@ -1,16 +1,18 @@
 if (require.main !== module)
   throw new Error('This is the control script for APS Node.js runtime, do not attempt to use it as a module');
 
-import child_process from 'child_process';
+import childProcess from 'child_process';
 import path from 'path';
 import os from 'os';
+import { writeFile as write } from 'fs';
 import c from './util/constants.js';
 import util from './util/util.js';
 
 process.chdir(__dirname);
 c.DIR_PREFIX = path.isAbsolute(c.DIR_PREFIX) ? c.DIR_PREFIX : __dirname;
 
-const result = {
+const PID_FILE = 'daemon.pid',
+  result = {
   fail: '[ FAIL ]',
   ok: '[  OK  ]'
 };
@@ -28,17 +30,21 @@ function exit(message, success = false) {
     .removeAllListeners('error');
   daemon.disconnect();
   daemon.unref();
-  log(result[success ? 'ok' : 'fail']);
+  if (success)
+    log(`${result.ok} PID: ${pid}`);
+  else 
+    log(result.fail);
   log(message);
   log(`More information may be available in '${logPath}'.`);
 }
 
 log('Starting APS Node.js daemon... ', false);
 
-const daemon = child_process.fork('daemon.js', {
-  //silent: true
-  //stdio: ['ignore', 'ignore', 'ignore']
-});
+const daemon = childProcess.fork('daemon.js', {
+    //silent: true
+    //stdio: ['ignore', 'ignore', 'ignore']
+  }),
+  pid = daemon.pid;
 
 daemon
   .on('error', err => exit(`Unexpected error occurred: ${err.message}`))
@@ -51,6 +57,7 @@ daemon
           logPath = message.logPath || logPath;
           break;
         case 'success':
+          write(path.resolve(__dirname, PID_FILE), pid);
           exit(message.message, true);
           break;
         case 'error':

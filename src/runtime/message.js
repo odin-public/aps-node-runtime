@@ -80,7 +80,7 @@ export class Incoming {
     this.certificate = request.socket.getPeerCertificate(true);
     this.certificate = (util.isObject(this.certificate) && Buffer.isBuffer(this.certificate.raw)) ? this.certificate : undefined;
     this._http = request;
-    this.remoteAddress = request.socket.remoteAddress; //TODO: Find a better way to use those fields
+    this.remoteAddress = request.socket.remoteAddress;
     this.body = '';
     this.ready = new Promise((resolve, reject) => {
       function removeListeners() {

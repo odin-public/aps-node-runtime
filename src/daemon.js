@@ -33,7 +33,7 @@ const ENDPOINT_CONFIG_SUFFIX = '.json',
   EXIT_GENERAL_FAILURE = 1,
   l = new Logger(getAssetPath(c.LOG_DIR, LOG_NAME));
 
-function send(message, type = 'error') { //TODO: this crap is affected by iojs/#760, beware
+function send(message, type = 'error') {
   return process.connected ? process.send({
     type,
     message
@@ -45,7 +45,7 @@ function exit(code) {
   l.close().then(() => process.exit(code));
 }
 
-process // TODO: make this use log when its available
+process
   .on('uncaughtException', error => {
     if (l.isReady() !== false)
       l.critical(`Unhandled error: ${error.stack}`);
@@ -73,7 +73,7 @@ l.ready
   })
   .catch(reason => {
     let message;
-    if (reason instanceof KnownError) { //TODO: KnownError.stringify
+    if (reason instanceof KnownError) {
       send(reason.message);
       message = reason.message;
     } else if (reason instanceof Error) {
@@ -98,7 +98,7 @@ function start() {
   l.info(`Reading main TLS private key file: '${tlsKeyPath}'...`);
   l.info(`Reading main TLS certificate file: '${tlsCertPath}'...`);
   l.info(`Listing endpoints directory: '${endpointsPath}'...`);
-  return Promise.join(fs.readFileAsync(configPath, 'utf-8').then(text => { //TODO: make custom config-reading function with length limit
+  return Promise.join(fs.readFileAsync(configPath, 'utf-8').then(text => {
     l.debug('Main configuration file was read successfully!');
     l.trace(`Main configuration file contents:\n${text}`);
     l.debug('Parsing main configuration file contents...');
@@ -144,7 +144,7 @@ function start() {
     l.level = Logger[config.logLevel];
     l.unpause();
     return config;
-  }), fs.readFileAsync(tlsKeyPath).then(text => { //TODO: custom cert paths or nobody cares?
+  }), fs.readFileAsync(tlsKeyPath).then(text => {
     l.debug('Main TLS private key file was read successfully!');
     l.trace(`Main TLS private key file contents:\n${text}`);
     l.debug('Validating main TLS private key file contents...');
@@ -236,7 +236,5 @@ function start() {
   }).then(() => {
     l.info(`Daemon was started successfully!`);
     send(router.printTable(), 'success');
-    process.stdin.pause();
-    Promise.delay(1000).then(() => console.log('asdasd'));
   });
 }

@@ -19,7 +19,7 @@ const levels = [
   openMark = '======= Log was opened =======';
 
 export class Logger {
-  constructor(path, mode = 0o644, writeOpenMark = true) { // TODO: fd-based and stream-based constructors
+  constructor(path, mode = 0o644, writeOpenMark = true) {
     if ((typeof path !== 'string') || !path)
       throw new TypeError('\'path\' argument must be a non-empty string');
     if (util.isBoolean(mode) && (writeOpenMark === undefined)) {
@@ -28,7 +28,6 @@ export class Logger {
     }
     this.path = path;
     this._pending = [];
-    //this._emitters = new Set();
     (this.ready = fs.openAsync(path, 'a', mode)).then(fd => {
       this._stream = fs.createWriteStream(null, {
         encoding: 'utf-8',
@@ -146,8 +145,6 @@ export class Logger {
         return this.close();
       });
     else {
-      //for (let v of this._emitters)
-      //  v.unpipe(this);
       this.dropPending();
       if ('_stream' in this) {
         const promise = this._stream.endAsync();
@@ -171,7 +168,7 @@ export class LogEmitter extends EventEmitter {
     };
   }
 
-  pipe(receiver) { // TODO: add a functionality that can transform flowing logs
+  pipe(receiver) {
     if (!((receiver instanceof Logger) || (receiver instanceof LoggerProxy) || (receiver instanceof LogEmitter)))
       throw new TypeError('\'receiver\' is expected to be either \'Logger\', \'LoggerProxy\' or \'LogEmitter\'');
     this._receivers.add(receiver);
@@ -183,7 +180,6 @@ export class LogEmitter extends EventEmitter {
 
   unpipeAll() {
     const size = this._receivers.size;
-    //this._receivers.forEach(v => v._emitters.delete(this));
     this._receivers.clear();
     return size;
   }

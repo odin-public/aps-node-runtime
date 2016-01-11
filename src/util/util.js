@@ -7,7 +7,6 @@ const NETWORK_PORT_MIN = 0,
 
 const extensions = {
   stringify(arg) {
-    //return JSON.stringify(object, null, 2); //TODO: old impl, up to debate
     return util.inspect(arg, {
       showHidden: true,
       depth: 3,
@@ -22,13 +21,13 @@ const extensions = {
     return Number.isSafeInteger(number) && (number > NETWORK_PORT_MIN) && (number < NETWORK_PORT_MAX);
   },
   isHostname(string) {
-    return /^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$/i.test(string); //TODO: all-number hostname is invalid but not detected
+    return /^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$/i.test(string);
   },
   capitalize(string) {
     string = String(string);
     return string.charAt(0).toUpperCase() + string.substring(1);
   },
-  pluralize(word, count = 2, excludeCount = false) { //TODO: perhaps 1st and 2nd arguments need to be switched
+  pluralize(word, count = 2, excludeCount = false) {
     word = String(word);
     const last = word.slice(-1);
     if (!excludeCount)

@@ -1,9 +1,9 @@
 var config = {
-  VERSION: '0.9.0',
+  VERSION: '0.1.0',
   NODE_MIN_VERSION: '5.0.0',
   BABEL_VERSION: "5.8.34",
   BLUEBIRD_VERSION: "3.1.1",
-  MOMENT_VERSION: "2.10.6",
+  MOMENT_VERSION: "2.11.1",
   UTILIS_VERSION: "1.0.2",
   MAIN_CONFIG: {
     logLevel: 'TRACE',
