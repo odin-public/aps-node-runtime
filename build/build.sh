@@ -9,6 +9,9 @@ PACKAGE_NAME=aps-node-runtime
 PACKAGE_VERSION=`node config.js VERSION`
 PACKAGE_RELEASE=1
 PROJECT_URL=https://github.com/oa-platform/aps-node-runtime
+CONTROL_SCRIPT_NAME=aps-node
+ENDPOINT_CONFIG_SUBDIR=endpoints
+BIN_DIR=/usr/sbin
 NODE_MIN_VERSION=`node config.js NODE_MIN_VERSION`
 BABEL_VERSION=`node config.js BABEL_VERSION`
 BLUEBIRD_VERSION=`node config.js BLUEBIRD_VERSION`
@@ -35,24 +38,26 @@ cp -r _babel/. src
 cd src
 npm i babel@$BABEL_VERSION bluebird@$BLUEBIRD_VERSION moment@$MOMENT_VERSION core-util-is@$UTILIS_VERSION || exit 1
 cd ..
-sed "s|PACKAGE_NAME|$PACKAGE_NAME|; s|PACKAGE_VERSION|$PACKAGE_VERSION|; s|PACKAGE_RELEASE|$PACKAGE_RELEASE|; s|PROJECT_URL|$PROJECT_URL|; s|CONFIG_NAME|$CONFIG_NAME|; s|NODE_MIN|v${NODE_MIN_VERSION}|; s|HOME_DIR|$HOME_DIR|; s|CONFIG_DIR|$CONFIG_DIR|; s|ENDPOINT_DIR|$ENDPOINT_DIR|; s|LOG_DIR|$LOG_DIR|; s|IDENTITY|$IDENTITY|g" rpm.spec > _rpm.spec
+sed "s|PACKAGE_NAME|$PACKAGE_NAME|g; s|PACKAGE_VERSION|$PACKAGE_VERSION|g; s|PACKAGE_RELEASE|$PACKAGE_RELEASE|g; s|PROJECT_URL|$PROJECT_URL|g; s|CONFIG_NAME|$CONFIG_NAME|g; s|NODE_MIN|v${NODE_MIN_VERSION}|g; s|HOME_DIR|$HOME_DIR|g; s|CONFIG_DIR|$CONFIG_DIR|g; s|ENDPOINT_CONFIG_SUBDIR|$ENDPOINT_CONFIG_SUBDIR|g;s|ENDPOINT_DIR|$ENDPOINT_DIR|g; s|LOG_DIR|$LOG_DIR|g; s|IDENTITY|$IDENTITY|g; s|BIN_DIR|$BIN_DIR|g; s|CONTROL_SCRIPT_NAME|$CONTROL_SCRIPT_NAME|g" rpm.spec > _rpm.spec
 find src -type d -printf "%%dir \"$HOME_DIR/%P\"\n" >> _rpm.spec
 find src \( -type l -o -type f \) -printf "\"$HOME_DIR/%P\"\n" >> _rpm.spec
+sed "s|HOME_DIR|$HOME_DIR|g" aps-node > _aps-node
 tar -cvzf $PACKAGE_NAME.tgz src
 mkdir -p _rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 cd _rpm
 mv ../$PACKAGE_NAME.tgz SOURCES
 node ../config.js MAIN_CONFIG > SOURCES/$CONFIG_NAME
+\cp -f ../_aps-node SOURCES/$CONTROL_SCRIPT_NAME
 \cp -f ~/.rpmmacros{,.bck} >/dev/null 2>&1
 cat > ~/.rpmmacros <<- EOM
 %packager Paul Gear
 %_topdir `pwd`
 %_tmppath `pwd`/tmp
 EOM
-cp -f ../_rpm.spec SPECS/rpm.spec
+\cp -f ../_rpm.spec SPECS/rpm.spec
 rpmbuild -ba SPECS/rpm.spec || { echo >&2 "Unable to build the RPM"; exit 1; }
 cp RPMS/noarch/* ../
 
 [ "$1" = "debug" ] && exit
 popd
-rm -rf $PACKAGE_NAME src _src _babel _rpm _rpm.spec >/dev/null 2>&1
+rm -rf $PACKAGE_NAME src _src _babel _rpm _rpm.spec _aps-node >/dev/null 2>&1

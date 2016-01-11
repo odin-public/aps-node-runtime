@@ -1,4 +1,4 @@
-
+import util from '../util/util.js';
 
 export default class Resource {
   constructor() {
@@ -6,6 +6,8 @@ export default class Resource {
   }
 
   static create(object, constructor) {
+    if (!util.isFunction(constructor))
+      throw new TypeError('\'constructor\' must be a function');
     const result = new constructor();
     for (let key in object) {
       if (!(key in result))

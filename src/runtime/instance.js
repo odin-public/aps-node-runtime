@@ -24,6 +24,7 @@ const LOG_NAME = 'instance.log',
   KEY_MODE = 0o600,
   CERT_MODE = KEY_MODE,
   CONFIG_MODE = 0o644,
+  LOG_MODE = KEY_MODE,
   HTTP_CODES = {
     GENERAL_ERROR: 500,
     CERT_ERROR: 403,
@@ -103,7 +104,7 @@ export default class Instance {
         apscCertPath = this._getAssetPath(APSC_CERT_NAME),
         configPath = this._getAssetPath(CONFIG_NAME),
         config = {},
-        l1 = this.logger = new Logger(logPath),
+        l1 = this.logger = new Logger(logPath, LOG_MODE),
         encoding = 'utf-8';
       for (let key in configValidators)
         config[key] = this[key];
@@ -176,11 +177,8 @@ export default class Instance {
         selfKeyPath = this._getAssetPath(SELF_KEY_NAME),
         apscCertPath = this._getAssetPath(APSC_CERT_NAME),
         configPath = this._getAssetPath(CONFIG_NAME),
-        config = {},
-        l1 = this.logger = new Logger(logPath),
+        l1 = this.logger = new Logger(logPath, LOG_MODE),
         encoding = 'utf-8';
-      for (let key in configValidators)
-        config[key] = this[key];
       l.info(`Opening log file: '${logPath}'...`);
       l.info(`Reading instance TLS certificate file: '${selfCertPath}'...`);
       l.info(`Reading instance TLS key file: '${selfKeyPath}'...`);
