@@ -17,6 +17,12 @@ This repository uses **git flow** with the following config:
 
 ## How do I test it?
 
+You will need NodeJS for all activities. To quickly install it, you can use these commands:
+
+    wget https://nodejs.org/dist/v5.4.0/node-v5.4.0-linux-x64.tar.gz && tar xvf node-v5.4.0-linux-x64.tar.gz && cd node-v5.4.0-linux-x64 && cp -r */ /usr && cd ..
+
+This will install it along with `npm` with `/usr` prefix.
+
 Currently, about **80%** of insfrastructure and routing is completed. However, only about **5%** of user code API and APS functionality is done. If you want to go ahead and test what's working, follow the steps below, and remember, **contributions are welcome in all forms (issues, pull requests, etc.)**.
 
 You need a working OA 6.0 installation with APS. Download the latest RPM from [releases](../../releases) section or [build it yourself](#building-rpm-from-source).
