@@ -241,3 +241,21 @@ Steps:
 - If you want to prevent cleanup after build process (e.g. to examine individual stages), run `./build.sh debug`
 
 This will download all the necessary packages and make an RPM inisde the `build` directory. Use that RPM to install the runtime on your OA endpoint.
+
+## Frequently asked questions
+
+##### Q:
+
+Why is your RPM so huge (3.25 MB)?
+
+##### A: 
+
+It contains all `npm` dependencies for the runtime so you don't have to download them after installation (since their version is supposed to be frozen anyway). It includes some fat packages like `babel`.
+
+##### Q:
+
+Why doesn't feature X work? It works fine in PHP runtime!
+
+##### A: 
+
+This is a prototype. There is only so much you can do with limited development time that is interrupted by ticket processing. **Fix/create something yourself and submit that pull request, buddy.** :grinning: Or at least head over to [issues section](../../issues) and tell us what doesn't work (**don't forget to include complete information on how to reproduce the issue**).
