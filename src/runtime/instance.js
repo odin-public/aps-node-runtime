@@ -362,7 +362,7 @@ export default class Instance {
       outgoing.end(httpError);
       return;
     }
-    if (typeof constructor !== 'function') {
+    if (!util.isFunction(constructor)) {
       httpError = new Error('Service code did not export a constructor');
       rl.error(httpError.message);
       httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -391,7 +391,7 @@ export default class Instance {
           return;
         }
         if ('provision' in resource) {
-          if (typeof resource.provision === 'function') {
+          if (util.isFunction(resource.provision)) {
             let result;
             try {
               result = resource.provision();
@@ -402,7 +402,7 @@ export default class Instance {
               outgoing.end(httpError);
               return;
             }
-            if (typeof result.then === 'function') {
+            if (util.isObject(result) && util.isFunction(result.then)) {
               rl.debug('Provisioning function has returned a .then\'able (promise)...');
               try {
                 result.then(() => {
@@ -458,7 +458,7 @@ export default class Instance {
           return;
         }
         if ('configure' in resource) {
-          if (typeof resource.configure === 'function') {
+          if (util.isFunction(resource.configure)) {
             let result;
             try {
               result = resource.configure(resource);
@@ -469,7 +469,7 @@ export default class Instance {
               outgoing.end(httpError);
               return;
             }
-            if (typeof result.then === 'function') {
+            if (util.isObject(result) && util.isFunction(result.then)) {
               rl.debug('Configuration function has returned a .then\'able (promise)...');
               try {
                 result.then(() => {
@@ -515,7 +515,7 @@ export default class Instance {
         return;
       }
       if ('unprovision' in resource) {
-        if (typeof resource.unprovision === 'function') {
+        if (util.isFunction(resource.unprovision)) {
           let result;
           try {
             result = resource.unprovision();
@@ -526,7 +526,7 @@ export default class Instance {
             outgoing.end(httpError);
             return;
           }
-          if (typeof result.then === 'function') {
+          if (util.isObject(result) && util.isFunction(result.then)) {
             rl.debug('Unprovisioning function has returned a .then\'able (promise)...');
             try {
               result.then(() => {
