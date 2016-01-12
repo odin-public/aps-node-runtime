@@ -150,12 +150,14 @@ import util from 'util';
 
 export default class globals {
   constructor() {
+
     // this scope runs on each request when resource is being constructed ('this' refers to the resource)
+    
   }
 
   provision() {
   
-    //these scopes run on each time a corresponding operation is performed on the resource
+    //these scopes run each time a corresponding operation is performed on the resource
 
     aps.logger.info(util.inspect(this));
     this.apphost = new Date();
