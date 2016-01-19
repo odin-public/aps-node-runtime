@@ -40,9 +40,9 @@ function exit(message, success = false) {
 
 log('Starting APS Node.js daemon... ', false);
 
-const daemon = childProcess.fork('daemon.js', {
-    //silent: true
-    //stdio: ['ignore', 'ignore', 'ignore']
+const daemon = childProcess.spawn(process.execPath, ['daemon.js'], {
+    detached: true,
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc']
   }),
   pid = daemon.pid;
 

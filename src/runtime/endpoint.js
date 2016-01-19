@@ -524,6 +524,7 @@ export default class Endpoint extends EventEmitter {
             instanceIds = [];
           instances.set(instanceId, destination);
           l.info(`Instance with ID: '${instanceId}' was created from request with ID: '${id}'...`);
+          instances.forEach((instance, id) => instanceIds.push(id));
           l.debug(`Following instances are available: '${instanceIds.join('\', \'')}'`);
         } catch (err) {
           rl.error(`Failed to create instance: ${err.message}`);

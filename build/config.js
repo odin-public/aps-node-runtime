@@ -1,5 +1,5 @@
 var config = {
-  VERSION: '0.1.0',
+  VERSION: '0.1.1',
   NODE_MIN_VERSION: '5.0.0',
   BABEL_VERSION: '5.8.34',
   BLUEBIRD_VERSION: '3.1.1',

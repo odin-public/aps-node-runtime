@@ -12,7 +12,7 @@ function start {
 
 function stop {
   [ -f daemon.pid ] || { echo "No PID file found: daemon.pid"; exit; }
-  kill -9 $PID > /dev/null 2>&1 || { echo "Could not kill the daemon process, PID:" $PID; exit; }
+  kill -9 $PID > /dev/null 2>&1 || { echo "Could not kill the daemon process, PID:" $PID; }
   rm -f daemon.pid
 }
 

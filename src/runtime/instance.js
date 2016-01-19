@@ -362,7 +362,7 @@ export default class Instance {
       outgoing.end(httpError);
       return;
     }
-    if (typeof constructor !== 'function') {
+    if (!util.isFunction(constructor)) {
       httpError = new Error('Service code did not export a constructor');
       rl.error(httpError.message);
       httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
@@ -391,26 +391,26 @@ export default class Instance {
           return;
         }
         if ('provision' in resource) {
-          if (typeof resource.provision === 'function') {
+          if (util.isFunction(resource.provision)) {
             let result;
             try {
               result = resource.provision();
             } catch (err) {
-              httpError = new Error(`Error while provisioning: ${err.message}`);
-              rl.error(`Error while provisioning: ${err.stack}`);
+              httpError = new Error(`Error while provisioning${util.isError(err) ? ': ' + err.message : ''}`);
+              rl.error(`Error while provisioning: ${KnownError.stringify(err)}`);
               httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
               outgoing.end(httpError);
               return;
             }
-            if (typeof result.then === 'function') {
+            if (util.isObject(result) && util.isFunction(result.then)) {
               rl.debug('Provisioning function has returned a .then\'able (promise)...');
               try {
                 result.then(() => {
                   rl.debug('Provisioning promise has been resolved!');
                   outgoing.end(JSON.stringify(resource));
                 }, reason => {
-                  httpError = new Error(`Provisioning promise has been rejected: ${err.message}`);
-                  rl.error(`Provisioning promise has been rejected: ${err.stack}`);
+                  httpError = new Error(`Provisioning promise has been rejected${util.isError(reason) ? ': ' + reason.message : ''}`);
+                  rl.error(`Provisioning promise has been rejected: ${KnownError.stringify(reason)}`);
                   httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
                   outgoing.end(httpError);
                 });
@@ -458,26 +458,26 @@ export default class Instance {
           return;
         }
         if ('configure' in resource) {
-          if (typeof resource.configure === 'function') {
+          if (util.isFunction(resource.configure)) {
             let result;
             try {
               result = resource.configure(resource);
             } catch (err) {
-              httpError = new Error(`Error while configuring: ${err.message}`);
-              rl.error(`Error while configuring: ${err.stack}`);
+              httpError = new Error(`Error while configuring${util.isError(err) ? ': ' + err.message : ''}`);
+              rl.error(`Error while configuring: ${KnownError.stringify(err)}`);
               httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
               outgoing.end(httpError);
               return;
             }
-            if (typeof result.then === 'function') {
+            if (util.isObject(result) && util.isFunction(result.then)) {
               rl.debug('Configuration function has returned a .then\'able (promise)...');
               try {
                 result.then(() => {
                   rl.debug('Configuration promise has been resolved!');
                   outgoing.end(JSON.stringify(resource));
                 }, reason => {
-                  httpError = new Error(`Configuration promise has been rejected: ${err.message}`);
-                  rl.error(`Configuration promise has been rejected: ${err.stack}`);
+                  httpError = new Error(`Configuration promise has been rejected${util.isError(reason) ? ': ' + reason.message : ''}`);
+                  rl.error(`Configuration promise has been rejected: ${KnownError.stringify(reason)}`);
                   httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
                   outgoing.end(httpError);
                 });
@@ -515,18 +515,18 @@ export default class Instance {
         return;
       }
       if ('unprovision' in resource) {
-        if (typeof resource.unprovision === 'function') {
+        if (util.isFunction(resource.unprovision)) {
           let result;
           try {
             result = resource.unprovision();
           } catch (err) {
-            httpError = new Error(`Error while unprovisioning: ${err.message}`);
-            rl.error(`Error while Unprovisioning: ${err.stack}`);
+            httpError = new Error(`Error while unprovisioning${util.isError(err) ? ': ' + err.message : ''}`);
+            rl.error(`Error while unprovisioning: ${KnownError.stringify(err)}`);
             httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
             outgoing.end(httpError);
             return;
           }
-          if (typeof result.then === 'function') {
+          if (util.isObject(result) && util.isFunction(result.then)) {
             rl.debug('Unprovisioning function has returned a .then\'able (promise)...');
             try {
               result.then(() => {
@@ -534,8 +534,8 @@ export default class Instance {
                 outgoing.code = HTTP_CODES.NO_CONTENT;
                 outgoing.end();
               }, reason => {
-                httpError = new Error(`Unprovisioning promise has been rejected: ${err.message}`);
-                rl.error(`Unprovisioning promise has been rejected: ${err.stack}`);
+                httpError = new Error(`Unprovisioning promise has been rejected${util.isError(reason) ? ': ' + reason.message : ''}`);
+                rl.error(`Unprovisioning promise has been rejected: ${KnownError.stringify(reason)}`);
                 httpError.code = outgoing.code = HTTP_CODES.GENERAL_ERROR;
                 outgoing.end(httpError);
               });

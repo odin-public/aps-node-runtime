@@ -25,7 +25,7 @@ This will install `node` along with `npm` with `/usr` prefix. Use `node -v` and 
 
 Currently, about **80%** of insfrastructure and routing is completed. However, only about **5%** of user code API and APS functionality is done. If you want to go ahead and test what's working, follow the steps below, and remember, **contributions are welcome in all forms (issues, pull requests, etc.)**.
 
-You need a working OA 6.0 installation with APS. Download the latest RPM from [releases](../../releases) section or [build it yourself](#building-rpm-from-source).
+You need a working OA 6.0 installation with APS. Download the latest RPM from [releases section](../../releases) or [build it yourself](#building-rpm-from-source).
 
 Use your RPM to install the runtime on the endpoint host (it needs to have **NodeJS of version 5 and above** already installed and available in `PATH`):
 
@@ -58,7 +58,7 @@ Reason: Endpoints directory is empty. Nothing to do!
 More information may be available in '/var/log/aps-node.log'.
 ```
 
-It will generally tell you what's wrong if it doesn't start. You can check the mentioned log for more info. In this case, endpoint configuration directory is empty (we have not yet created any endpoints).
+It will generally tell you what's wrong if it doesn't start. You can check the mentioned log for more info. In this case, endpoint configuration directory is empty (we have not yet created any endpoints, you will learn how to do that below).
 
 You can also check and adjust main daemon configuration file at `/etc/aps/node/config.json`.
 
@@ -145,14 +145,20 @@ Service code files are located inside (sometimes not immideately) the endpoint h
 ```javascript
 import crypto from 'crypto';
 import util from 'util';
-import 
+
+// this scope runs during a dry run and on each request
 
 export default class globals {
   constructor() {
+
+    // this scope runs on each request when resource is being constructed ('this' refers to the resource)
     
   }
 
   provision() {
+  
+    //these scopes run each time a corresponding operation is performed on the resource
+
     aps.logger.info(util.inspect(this));
     this.apphost = new Date();
     return new Promise(resolve => {
@@ -176,7 +182,7 @@ export default class globals {
 You are encouraged to experiment with the service code files to see what they are capable of. Notable features:
 
 - Global object is shared between all service code scopes of the same instance and is not dropped while the runtime is running (use it to share DB connections or something like that).
-- Global scope contains `aps` object that will hold the user code API (**note: when it's undefined, that means that runtime is executing a dry run, it does that once for each service after starting**).
+- Global scope contains `aps` object that will hold the user code API (**note: when it's undefined, that means that runtime is executing a so-called 'dry run', it does that once for each service after starting**).
 - Returning `Promise` (or any `.then`able) from functions will use its value to decide the request's fate.
 - `aps.logger` allows you to write to the corresponding `instance.log`.
 - `this` is set to the resource in question (**note: no validation is performed on `this` before `JSON.stringify`ing it and sending to the controller**).
@@ -194,9 +200,9 @@ This runtime has a very verbose logging. Adjust log levels in corresponding conf
 2016-01-11 10:41:28.311 [DEBUG][Router] Endpoint host identifier is already an IP address: '0.0.0.0'. No NS lookup needed!
 ```
 
-Log messages typically contain date, message level, component (sometimes prefix with an ID) and the message itself. Most dynamic values will be enclosed in `'` if they are strings.
+Log messages typically contain date and time, message level, a prefix or several (sometimes with an ID) and the message itself. Most dynamic values will be enclosed in `'` if they are strings.
 
-Valid prefixes:
+Prefixes help you identify what sent that log message. Prefixes can contain IDs (like endpoint or instance IDs) as well. Those that do are shown here:
 
 ```
 E: endpoint
@@ -204,7 +210,7 @@ I: instance
 R: request
 ```
 
-Valid levels:
+Each log message has a level. The message only gets printed if the destination logger's log level is lower or equal to that of a message:
 
 ```
 TRACE - typically used to log dynamic data (file contents, etc.)
@@ -241,3 +247,33 @@ Steps:
 - If you want to prevent cleanup after build process (e.g. to examine individual stages), run `./build.sh debug`
 
 This will download all the necessary packages and make an RPM inisde the `build` directory. Use that RPM to install the runtime on your OA endpoint.
+
+## Frequently asked questions
+
+##### Q:
+
+Why is your RPM so huge (3.25 MB)?
+
+##### A: 
+
+It contains all `npm` dependencies for the runtime so you don't have to download them after installation (since their version is supposed to be frozen anyway). It includes some fat packages like `babel`.
+
+##### Q:
+
+Why doesn't feature X work? It works fine in PHP runtime!
+
+##### A: 
+
+This is a prototype. There is only so much you can do with limited development time that is interrupted by ticket processing. **Fix/create something yourself and submit that pull request, buddy.** :grinning: Or at least head over to [issues section](../../issues) and tell us what doesn't work (**don't forget to include complete information on how to reproduce the issue**).
+
+##### Q:
+
+An error has occured in one of my service scripts, but it's stack trace does not match the code I wrote. What's the deal here?
+
+##### Q:
+
+I've installed your runtime and then went to `/usr/share/aps/node` to check the JS sources out. The code I saw there is not readable at all. How did you write this? Are you insane?
+
+##### A: 
+
+I'm not insane... no, really. :laughing: However, the people behind [Babel transpiler](https://babeljs.io/) ARE insane (and by that I mean insanely smart). This runtime uses Babel extensively to transform code from ES6 to ES5 both inside itself and inside user scripts. If you want to check out code, do it on this repository and not on the already-installed runtime. If you see a discrepancy in stack traces, that means that source map support failed somewhere and you can submit a bug.
