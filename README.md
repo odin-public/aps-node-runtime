@@ -81,7 +81,7 @@ That output includes a PID of a newly started daemon as well as location of a ma
 aps-node   851  1.6  0.6 1048000 55656 pts/0   Sl   11:24   0:01 /usr/bin/node daemon.js
 ```
 
-Here it is, dropped its privileges and is now running as `aps-node`. Observant people may notice that it still has a terminal (`pts/0`) attached, whereas a daemon shouldn't need a terminal. Those observant people would be correct, and it's already known as [issue #7](../../issues/7) and I'd really appreciate any help if someone knows how to fix it. :smile:
+Here it is, dropped its privileges and is now running as `aps-node`.
 
 That's it! You can now use this host the same way you did with PHP runtime. You can use [VPS Cloud Basic](http://dev.apsstandard.org/apps/2.0/APS%20team/Sample%20VPS%20Cloud%20Basic/APS%20team/) for testing the functionality (it has service named `clouds` out of the box).
 
