@@ -11,7 +11,7 @@ export default class KnownError extends Error {
   static stringify(value) {
     if (value instanceof KnownError)
       return value.message;
-    else if (value instanceof Error)
+    else if (util.isError(value))
       return value.stack;
     else
       return util.stringify(value);
