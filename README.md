@@ -60,9 +60,9 @@ More information may be available in '/var/log/aps-node.log'.
 
 It will generally tell you what's wrong if it doesn't start. You can check the mentioned log for more info. In this case, endpoint configuration directory is empty (we have not yet created any endpoints, you will learn how to do that below).
 
-You can also check and adjust main daemon configuration file at `/etc/aps/node/config.json`.
+You can also check and adjust main daemon configuration file: `/etc/aps/node/config.json`.
 
-When you fix all issues that prevent it from starting, you will see something similar to this:
+When you fix all issues that prevent the daemon from starting, you will see something similar to this:
 
 ```
 [root@endpoint node]# aps-node start
@@ -81,7 +81,7 @@ That output includes a PID of a newly started daemon as well as location of a ma
 aps-node   851  1.6  0.6 1048000 55656 pts/0   Sl   11:24   0:01 /usr/bin/node daemon.js
 ```
 
-Here it is, dropped its privileges and is now running as `aps-node`.
+Here it is, dropped its privileges and is now running as `aps-node` user.
 
 That's it! You can now use this host the same way you did with PHP runtime. You can use [VPS Cloud Basic](http://dev.apsstandard.org/apps/2.0/APS%20team/Sample%20VPS%20Cloud%20Basic/APS%20team/) for testing the functionality (it has service named `clouds` out of the box).
 
@@ -89,14 +89,14 @@ That's it! You can now use this host the same way you did with PHP runtime. You 
 
 In PHP runtime, that task was performed by `endpoint.sh` script. For this runtime, the task is not yet automated (althoug it will probably be performed by the same `aps-node` script in the future).
 
-Currently, an endpoint is created manually. An endpoint is defined by two assets:
+An endpoint is defined by two assets:
 
 - Configuration file in JSON format
 - Home directory that contains user code
 
 Minimal configuration file looks like this:
 
-test.json
+`test.json`
 ```
 {
   "services": [
@@ -105,7 +105,7 @@ test.json
 }
 ```
 
-Placing this file inside the endpoints configuration directory at `/etc/aps/node/endpoints` will create an endpoint with name `test` (deduced from file name), home inside default directory (full path: `/var/aps/node/test`) and all other default options. Upon starting, runtime will look for `clouds.js` inside the home directory to handle the incoming requests for service with ID `clouds`.
+Placing this file inside the endpoints configuration directory at `/etc/aps/node/endpoints` will create an endpoint with name `test` (deduced from file name), home inside default directory (full path: `/var/aps/node/test`) and all other default options. Upon starting, runtime will look for `clouds.js` inside the endpoint home directory to handle the incoming requests for service with ID `clouds`.
 
 If something goes wrong, you can always check the main log or the endpoint log (`aps/endpoint.log` inside the endpoint gome directory).
 
@@ -140,7 +140,7 @@ When starting, endpoint will create `aps` directory (which contains a log and a 
 
 ## Service code files
 
-Service code files are located inside (sometimes not immideately) the endpoint home directory. If everything else goes well, this file is ultimately the one deciding what to do with the request. **Service handlers are ES6 (ES2015) compatible**, by default, `babel` will be used to transpile the file, unless `useBabel` is set to `false` for that endpoint. A typical file looks like this:
+Service code files are located inside (sometimes not immediately) the endpoint home directory. If everything else goes well, this file is ultimately the one deciding what to do with the request. **Service handlers are ES6 (ES2015) compatible**, by default, `babel` will be used to transpile the file, unless `useBabel` is set to `false` for that endpoint. A typical file looks like this:
 
 ```javascript
 import crypto from 'crypto';
@@ -181,14 +181,14 @@ export default class globals {
 
 You are encouraged to experiment with the service code files to see what they are capable of. Notable features:
 
-- Global object is shared between all service code scopes of the same instance and is not dropped while the runtime is running (use it to share DB connections or something like that).
+- Global object is shared between all service code scopes of the same instance and is not dropped while the runtime is running (use it to share DB connections or other persistent resources).
 - Global scope contains `aps` object that will hold the user code API (**note: when it's undefined, that means that runtime is executing a so-called 'dry run', it does that once for each service after starting**).
 - Returning `Promise` (or any `.then`able) from functions will use its value to decide the request's fate.
 - `aps.logger` allows you to write to the corresponding `instance.log`.
-- `this` is set to the resource in question (**note: no validation is performed on `this` before `JSON.stringify`ing it and sending to the controller**).
+- `this` is set to the resource in question (**note: no validation is performed on `this` before `JSON.stringify`ing it and sending back to the controller**).
 - `require` works properly (uses correct paths), but `process.cwd` does not. This means that running something like `fs.readFile('./test.txt')` will actually attempt to read `/usr/share/aps/node/test.txt` instead of a file inside the endpoint home.
 
-Keep in mind that you need to **restart the main daemon after changing code** because that runtime is persistent and reads all its files only once when starting. The only handles it keeps when running are logs and sockets.
+Keep in mind that you need to **restart the main daemon after changing code** because this runtime is persistent and reads all its files only once when starting. The only handles it keeps when running are logs and sockets.
 
 ## Interpreting logs
 
@@ -235,7 +235,7 @@ You will need:
 - Babel 5.8.34
 - `rpmbuild` command
 
-If you are missing something from this list (exctept the first item :grinning:), `build/build.sh` script will tell you about it.
+If you are missing something from this list (except the first item :grinning:), `build/build.sh` script will tell you about it.
 
 Steps:
 
